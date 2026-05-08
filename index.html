@@ -209,6 +209,7 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 
 @keyframes blink{0%,100%{opacity:.85;}50%{opacity:0;}}
 @keyframes pulse{0%,100%{opacity:.9;}50%{opacity:1;}}
+@keyframes scCountPulse{0%{transform:scale(1.4);opacity:.6;}100%{transform:scale(1);opacity:1;}}
 
 /* LEADERBOARD */
 #lbOverlay{
@@ -521,6 +522,7 @@ async function lbSubmit(pseudo,score,skin){
     if(existing&&existing.score>=score){
       status.textContent=`TON RECORD EST DÉJÀ ${existing.score} !`;
       status.className='lb-status info';
+      clearPendingScore();
       lbLoad();return;
     }
     const{error}=await sb.from('leaderboard').upsert(
@@ -529,13 +531,16 @@ async function lbSubmit(pseudo,score,skin){
     );
     if(error)throw error;
     localStorage.setItem('fwPseudo',pseudo);
+    clearPendingScore();
     status.textContent='✓ SCORE SOUMIS !';status.className='lb-status';
     document.getElementById('submitForm').style.display='none';
     _pendingScore=null;
     SFX.buy();vib(30);
     setTimeout(lbLoad,500);
   }catch(e){
-    status.textContent='ERREUR: '+(e.message||'INCONNU');
+    // Bug 8 fix : sauvegarder en attente si offline
+    savePendingScore(pseudo,score,skin);
+    status.textContent='PAS DE RÉSEAU — SCORE SAUVEGARDÉ EN ATTENTE';
     status.className='lb-status err';
   }
 }
@@ -596,7 +601,6 @@ const DEF_SAVE={
   upgrades:{jump:0,gravity:0,speed:0},
   dailyLast:'',streak:0,
   secondChances:1,// offerte au démarrage
-  freeSCUsed:false,// seconde chance gratuite utilisée
 };
 function loadSave(){
   try{const s=JSON.parse(localStorage.getItem('fwv4'));return s?{...DEF_SAVE,...s,upgrades:{...DEF_SAVE.upgrades,...(s.upgrades||{})}}:structuredClone(DEF_SAVE);}
@@ -1317,6 +1321,7 @@ class Game{
     this.wi=0;this.wt=1;this.wTransing=false;this.wLabelA=0;this.wLabelT=0;
     this._bgG=null;this._bgGK='';
     this.state='playing';
+    this.scUsedThisGame=false; // Bug 3+9 fix : réinitialisé à chaque partie
     SV.games++;saveSave();
     showScreen(null);
     document.getElementById('hud').classList.add('playing');
@@ -1326,24 +1331,48 @@ class Game{
 
 
   revive(){
-    // Ressusciter l'oiseau à sa position actuelle
+    // Repositionner l'oiseau au centre de l'écran
+    this.bird.x=this.W*.25;
+    this.bird.y=this.H*.45;
     this.bird.alive=true;
     this.bird.stunned=false;
-    this.bird.vy=-this.baseGrav*8; // petit boost vers le haut
+    this.bird.vy=0;
     this.bird.dt=0;
     this.bird.angle=0;
-    this.state='playing';
-    document.getElementById('hud').classList.add('playing');
-    SFX.buy(); vib(30);
-    // Effacer les tuyaux proches pour laisser de l'espace
-    this.pipes=this.pipes.filter(p=>p.x>this.W*.3);
+    // Effacer tous les tuyaux pour laisser de l'espace
+    this.pipes=[];
+    this.nextPX=this.W+this.pw;
     this.parts=[];
     this.flash=0;
+    SFX.buy(); vib(30);
+    // Compte à rebours 3 secondes avant de reprendre
+    this.state='reviving';
+    document.getElementById('hud').classList.remove('playing');
+    this._reviveCountdown=3;
+    this._reviveTimer=0;
+    this._showReviveOverlay(3);
+  }
+
+  _showReviveOverlay(n){
+    let el=document.getElementById('reviveCountdown');
+    if(!el){
+      el=document.createElement('div');
+      el.id='reviveCountdown';
+      el.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:95;pointer-events:none;';
+      document.body.appendChild(el);
+    }
+    el.innerHTML=`<div style="font-family:\'Press Start 2P\',monospace;font-size:clamp(60px,18vw,100px);color:#fff;text-shadow:0 0 30px rgba(0,245,255,.8),0 0 60px rgba(0,245,255,.4);animation:scCountPulse .8s ease-out;">${n}</div>`;
+  }
+
+  _hideReviveOverlay(){
+    const el=document.getElementById('reviveCountdown');
+    if(el)el.remove();
   }
 
   tap(){
     if(anyOverlayOpen())return;
     if(this.state==='menu'||this.state==='dead'){this.startGame();return;}
+    if(this.state==='reviving')return; // bloquer le tap pendant le compte à rebours
     if(this.state==='playing'&&this.bird.alive)this.bird.flap(this.grav(),this.flapMult);
   }
 
@@ -1377,6 +1406,21 @@ class Game{
   update(ts){
     const dt=Math.min(ts-this.lastTs,50);this.lastTs=ts;
     this.stars.update();
+    if(this.state==='reviving'){
+      this._reviveTimer+=dt;
+      if(this._reviveTimer>=1000){
+        this._reviveTimer=0;
+        this._reviveCountdown--;
+        if(this._reviveCountdown<=0){
+          this._hideReviveOverlay();
+          this.state='playing';
+          document.getElementById('hud').classList.add('playing');
+        } else {
+          this._showReviveOverlay(this._reviveCountdown);
+        }
+      }
+      return;
+    }
     if(this.state!=='playing')return;
     this.fc++;
     this._applyDiff();
@@ -1520,13 +1564,14 @@ function showScreen(id){
 }
 function showDeadScreen(score,coins){
   _pendingScore=score;
-  // Vérifier si on propose une seconde chance
-  const hasSC=(SV.secondChances||0)>0;
+  // Vérifier si on propose une seconde chance (1 seule par partie)
+  const hasSC=(SV.secondChances||0)>0 && !game.scUsedThisGame;
   if(hasSC){
     // Proposer la seconde chance avant le game over
     offerSecondChance(
       // onContinue : le joueur accepte
       function(){
+        game.scUsedThisGame=true; // Bug 3 fix : marquer SC utilisée cette partie
         // Relancer la partie depuis la position actuelle
         game.revive();
       },
@@ -1856,10 +1901,69 @@ function showPpMsg(msg, isErr=false){
   setTimeout(() => { if(el.textContent===msg) el.textContent=''; }, 4000);
 }
 
+/* ── Bug 8 fix : score en attente offline ── */
+function savePendingScore(pseudo,score,skin){
+  try{localStorage.setItem('fwPendingScore',JSON.stringify({pseudo,score,skin}));}catch(e){}
+}
+function clearPendingScore(){
+  try{localStorage.removeItem('fwPendingScore');}catch(e){}
+}
+async function flushPendingScore(){
+  try{
+    const raw=localStorage.getItem('fwPendingScore');
+    if(!raw)return;
+    const {pseudo,score,skin}=JSON.parse(raw);
+    const{data:existing}=await sb.from('leaderboard').select('score').eq('pseudo',pseudo).maybeSingle();
+    if(!existing||existing.score<score){
+      await sb.from('leaderboard').upsert({pseudo,score,skin},{onConflict:'pseudo'});
+    }
+    clearPendingScore();
+    console.log('Score en attente soumis !');
+  }catch(e){/* toujours offline, on réessaiera */}
+}
+// Essayer de soumettre le score en attente au démarrage
+window.addEventListener('online',flushPendingScore);
+setTimeout(flushPendingScore,2000);
+
+/* ── Bug 2 fix : achats sauvegardés sur Supabase ──
+   Table attendue : purchases(device_id text, sc int, coins int, updated_at timestamptz)
+   La clé device_id est générée et stockée en localStorage.
+*/
+function getDeviceId(){
+  let id=localStorage.getItem('fwDeviceId');
+  if(!id){id=crypto.randomUUID();localStorage.setItem('fwDeviceId',id);}
+  return id;
+}
+
+async function syncPurchasesToCloud(){
+  try{
+    const did=getDeviceId();
+    const{data}=await sb.from('purchases').select('sc,coins').eq('device_id',did).maybeSingle();
+    if(data){
+      // Restaurer si les valeurs cloud sont supérieures (protection suppression)
+      if((data.sc||0)>(SV.secondChances||0)){SV.secondChances=data.sc;saveSave();}
+      if((data.coins||0)>(SV.coins||0)){SV.coins=data.coins;saveSave();}
+    }
+  }catch(e){/* offline, on ignore */}
+}
+
+async function savePurchaseToCloud(){
+  try{
+    const did=getDeviceId();
+    await sb.from('purchases').upsert(
+      {device_id:did, sc:SV.secondChances||0, coins:SV.coins||0, updated_at:new Date().toISOString()},
+      {onConflict:'device_id'}
+    );
+  }catch(e){/* offline, on ignore */}
+}
+
+// Sync au démarrage
+setTimeout(syncPurchasesToCloud,1500);
+window.addEventListener('online',syncPurchasesToCloud);
+
 function createPayPalButton(containerId, amount, label, onSuccess){
   const container = document.getElementById(containerId);
   if(!container) return;
-  // Vérifier si PayPal SDK est chargé
   if(typeof paypal === 'undefined'){
     container.innerHTML = '<div style="font-size:7px;color:#888;padding:8px;">PayPal indisponible</div>';
     return;
@@ -1876,6 +1980,11 @@ function createPayPalButton(containerId, amount, label, onSuccess){
     },
     onApprove: function(data, actions){
       return actions.order.capture().then(function(details){
+        // Bug 7 fix : vérifier que le statut est bien COMPLETED
+        if(details.status !== 'COMPLETED'){
+          showPpMsg('❌ Paiement non complété', true);
+          return;
+        }
         onSuccess(details);
       });
     },
@@ -1891,6 +2000,7 @@ function initPayPalButtons(){
   createPayPalButton('paypal-btn-1000', '5.00', '1000 pièces Floppy Wings', function(details){
     SV.coins += 1000;
     saveSave();
+    savePurchaseToCloud();
     document.getElementById('menuCoins').textContent='🪙 '+SV.coins+' PIÈCES';
     document.getElementById('shopCoinsVal').textContent=SV.coins;
     showPpMsg('✓ +1000 pièces ajoutées !');
@@ -1901,6 +2011,7 @@ function initPayPalButtons(){
   createPayPalButton('paypal-btn-2000', '8.00', '2000 pièces Floppy Wings', function(details){
     SV.coins += 2000;
     saveSave();
+    savePurchaseToCloud();
     document.getElementById('menuCoins').textContent='🪙 '+SV.coins+' PIÈCES';
     document.getElementById('shopCoinsVal').textContent=SV.coins;
     showPpMsg('✓ +2000 pièces ajoutées !');
@@ -1911,6 +2022,7 @@ function initPayPalButtons(){
   createPayPalButton('paypal-btn-sc', '5.00', '10 secondes chances Floppy Wings', function(details){
     SV.secondChances = (SV.secondChances||0) + 10;
     saveSave();
+    savePurchaseToCloud();
     showPpMsg('✓ +10 secondes chances !');
     SFX.buy(); vib(40);
   });
@@ -1949,7 +2061,6 @@ function closeScPopup(){
 document.getElementById('btnUseSC').addEventListener('click', e=>{
   e.stopPropagation();
   SV.secondChances = Math.max(0,(SV.secondChances||0)-1);
-  SV.freeSCUsed = true;
   saveSave();
   closeScPopup();
   if(_scCallback) _scCallback.onContinue();
