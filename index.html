@@ -2080,23 +2080,23 @@ function showAccountPopup(mode){
     title.textContent='BIENVENUE !';
     sub.textContent='Choisis un pseudo pour sauvegarder ta progression et apparaître au classement.';
     _showAccountEl('accountPseudoWrap');
-    _showAccountEl('accountPinWrap','none');
+    _showAccountEl('accountPinWrap',false);
     skipBtn.style.display='block'; // peut jouer sans compte
   } else if(mode==='new_pin'){
     title.textContent='CRÉE TON PIN';
     sub.textContent='Retiens bien ce code à 4 chiffres. Il te permettra de récupérer ton compte.';
-    _showAccountEl('accountPseudoWrap','none');
+    _showAccountEl('accountPseudoWrap',false);
     _showAccountEl('accountPinWrap');
     skipBtn.style.display='none';
   } else if(mode==='recover'){
     title.textContent='COMPTE INTROUVABLE';
-    sub.textContent='Ton appareil n'est pas reconnu. Entre ton pseudo + PIN pour récupérer tes données, ou crée un nouveau compte.';
+    sub.textContent="Ton appareil n'est pas reconnu. Entre ton pseudo + PIN pour récupérer tes données, ou crée un nouveau compte.";
     _showAccountEl('accountPseudoWrap');
     _showAccountEl('accountPinWrap');
     skipBtn.style.display='block';
   } else if(mode==='login_pin'){
     title.textContent='PSEUDO DÉJÀ PRIS';
-    sub.textContent='Ce pseudo existe déjà. Entre ton PIN pour confirmer que c'est bien toi.';
+    sub.textContent="Ce pseudo existe déjà. Entre ton PIN pour confirmer que c'est bien toi.";
     _showAccountEl('accountPseudoWrap','none');
     _showAccountEl('accountPinWrap');
     skipBtn.style.display='block';
