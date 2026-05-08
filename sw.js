@@ -3,7 +3,7 @@
    Version du cache : incrémente ce numéro à chaque
    mise à jour pour forcer le rechargement chez tous.
    ═══════════════════════════════════════════════ */
-const CACHE_NAME = 'floppy-wings-v13';
+const CACHE_NAME = 'floppy-wings-v14';
 
 const ASSETS_TO_CACHE = [
   './',
