@@ -2187,14 +2187,24 @@ document.getElementById('accountBtnOk').addEventListener('click',async e=>{
     setAccountStatus('CRÉATION...', false);
     try{
       const ph=await hashPin(pin);
-      await sb.from('purchases').insert({
-        device_id:did, pseudo:_accountPendingPseudo, pin_hash:ph,
-        sc:SV.secondChances||0, coins:SV.coins||0, best:SV.best||0,
-        owned:JSON.stringify(SV.owned||['classic']),
-        upgrades:JSON.stringify(SV.upgrades||{jump:0,gravity:0,speed:0}),
-        equipped:SV.equipped||'classic', streak:SV.streak||0,
-        updated_at:new Date().toISOString()
-      });
+      // Vérifier si une ligne existe déjà pour ce device (ancien utilisateur sans pseudo)
+      const{data:myRow}=await sb.from('purchases').select('device_id').eq('device_id',did).maybeSingle();
+      if(myRow){
+        // Mettre à jour la ligne existante
+        await sb.from('purchases').update({
+          pseudo:_accountPendingPseudo, pin_hash:ph, updated_at:new Date().toISOString()
+        }).eq('device_id',did);
+      } else {
+        // Insérer nouvelle ligne
+        await sb.from('purchases').insert({
+          device_id:did, pseudo:_accountPendingPseudo, pin_hash:ph,
+          sc:SV.secondChances||0, coins:SV.coins||0, best:SV.best||0,
+          owned:JSON.stringify(SV.owned||['classic']),
+          upgrades:JSON.stringify(SV.upgrades||{jump:0,gravity:0,speed:0}),
+          equipped:SV.equipped||'classic', streak:SV.streak||0,
+          updated_at:new Date().toISOString()
+        });
+      }
       localStorage.setItem('fwPseudo',_accountPendingPseudo);
       setAccountStatus('✓ COMPTE CRÉÉ !', false);
       SFX.buy(); vib(30);
@@ -2252,21 +2262,30 @@ document.getElementById('accountBtnOk').addEventListener('click',async e=>{
     setAccountStatus('CRÉATION...', false);
     try{
       const ph=await hashPin(pin);
-      // Vérifier si le pseudo existe déjà dans purchases (cas rare)
-      const{data:existing}=await sb.from('purchases').select('device_id').eq('pseudo',_accountPendingPseudo).maybeSingle();
-      if(existing){
-        // Ligne existe déjà (autre device) → mettre à jour device_id et pin
-        await sb.from('purchases').update({device_id:did,pin_hash:ph,updated_at:new Date().toISOString()}).eq('pseudo',_accountPendingPseudo);
+      // Cas 1 : ligne purchases existe pour ce device_id mais sans pseudo (ancien utilisateur)
+      const{data:myRow}=await sb.from('purchases').select('device_id').eq('device_id',did).maybeSingle();
+      if(myRow){
+        // Mettre à jour la ligne existante avec pseudo + PIN
+        await sb.from('purchases').update({
+          pseudo:_accountPendingPseudo, pin_hash:ph, updated_at:new Date().toISOString()
+        }).eq('device_id',did);
       } else {
-        // Insérer nouvelle ligne avec données locales
-        await sb.from('purchases').insert({
-          device_id:did, pseudo:_accountPendingPseudo, pin_hash:ph,
-          sc:SV.secondChances||0, coins:SV.coins||0, best:SV.best||0,
-          owned:JSON.stringify(SV.owned||['classic']),
-          upgrades:JSON.stringify(SV.upgrades||{jump:0,gravity:0,speed:0}),
-          equipped:SV.equipped||'classic', streak:SV.streak||0,
-          updated_at:new Date().toISOString()
-        });
+        // Cas 2 : pas de ligne pour ce device → vérifier si pseudo pris ailleurs
+        const{data:pseudoRow}=await sb.from('purchases').select('device_id').eq('pseudo',_accountPendingPseudo).maybeSingle();
+        if(pseudoRow){
+          // Pseudo pris sur un autre device → update device_id + pin
+          await sb.from('purchases').update({device_id:did,pin_hash:ph,updated_at:new Date().toISOString()}).eq('pseudo',_accountPendingPseudo);
+        } else {
+          // Aucune ligne → insérer
+          await sb.from('purchases').insert({
+            device_id:did, pseudo:_accountPendingPseudo, pin_hash:ph,
+            sc:SV.secondChances||0, coins:SV.coins||0, best:SV.best||0,
+            owned:JSON.stringify(SV.owned||['classic']),
+            upgrades:JSON.stringify(SV.upgrades||{jump:0,gravity:0,speed:0}),
+            equipped:SV.equipped||'classic', streak:SV.streak||0,
+            updated_at:new Date().toISOString()
+          });
+        }
       }
       localStorage.setItem('fwPseudo',_accountPendingPseudo);
       setAccountStatus('✓ COMPTE SÉCURISÉ !', false);
@@ -2306,29 +2325,46 @@ async function bootAccount(){
   }
   // device_id présent → chercher en DB
   try{
-    const{data}=await sb.from('purchases').select('device_id').eq('device_id',did).maybeSingle();
+    const{data}=await sb.from('purchases')
+      .select('device_id,pseudo,pin_hash')
+      .eq('device_id',did).maybeSingle();
+
     if(data){
-      // Compte trouvé → sync normal
-      syncFromCloud();
+      // Ligne trouvée — vérifier si pseudo + PIN sont définis
+      if(data.pseudo && data.pin_hash){
+        // Compte complet → sync normal
+        syncFromCloud();
+      } else {
+        // Ligne existe mais sans pseudo/PIN (ancien utilisateur avant système PIN)
+        // Chercher si un pseudo est stocké localement ou dans leaderboard
+        const savedPseudo=localStorage.getItem('fwPseudo')||'';
+        if(savedPseudo){
+          // A déjà soumis un score → on propose de sécuriser avec ce pseudo
+          _accountPendingPseudo=savedPseudo.toUpperCase();
+          showAccountPopup('migrate_pin');
+        } else {
+          // Aucun pseudo nulle part → créer pseudo + PIN
+          showAccountPopup('migrate_new');
+        }
+      }
       return;
     }
-    // Pas de ligne purchases pour ce device_id
-    // → Migration : l'utilisateur avait peut-être déjà un pseudo dans leaderboard
+
+    // Pas de ligne purchases pour ce device_id du tout
+    // → Vérifier si pseudo local connu dans leaderboard
     const savedPseudo=localStorage.getItem('fwPseudo')||'';
     if(savedPseudo){
-      // Vérifier si ce pseudo existe dans leaderboard
       const{data:lbData}=await sb.from('leaderboard').select('pseudo').eq('pseudo',savedPseudo.toUpperCase()).maybeSingle();
       if(lbData){
-        // Pseudo connu dans leaderboard → migration avec PIN uniquement
         _accountPendingPseudo=savedPseudo.toUpperCase();
         showAccountPopup('migrate_pin');
         return;
       }
     }
-    // Pas de pseudo connu → migration complète (pseudo + PIN)
+    // Vraiment nouveau → créer pseudo + PIN
     showAccountPopup('migrate_new');
   }catch(e){
-    // Offline → sync depuis localStorage uniquement, pas de popup
+    // Offline → pas de popup
     console.warn('bootAccount offline:', e);
   }
 }
