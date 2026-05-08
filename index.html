@@ -2044,11 +2044,13 @@ const savePurchaseToCloud=saveToCloud;
    POPUP COMPTE : inscription / connexion
 ════════════════════════════════════════ */
 // Flux :
-// 1. Pas de device_id en localStorage → première ouverture → showAccountPopup('new')
-// 2. device_id présent mais pas de ligne en DB (app supprimée) → showAccountPopup('recover')
-// 3. device_id + ligne DB → syncFromCloud normal, pas de popup
+// 1. Pas de device_id → première ouverture → showAccountPopup('new')
+// 2. device_id + ligne DB → syncFromCloud normal
+// 3. device_id SANS ligne DB + pseudo leaderboard connu → showAccountPopup('migrate_pin')
+// 4. device_id SANS ligne DB + pas de pseudo → showAccountPopup('migrate_new')
+// 5. (recover) device_id inconnu, pas de pseudo local → showAccountPopup('recover')
 
-let _accountStep = ''; // 'new' | 'recover' | 'login_pin'
+let _accountStep = ''; // 'new' | 'new_pin' | 'recover' | 'login_pin' | 'migrate_pin' | 'migrate_new'
 let _accountPendingPseudo = '';
 
 function _getPin(){
@@ -2097,8 +2099,22 @@ function showAccountPopup(mode){
   } else if(mode==='login_pin'){
     title.textContent='PSEUDO DÉJÀ PRIS';
     sub.textContent="Ce pseudo existe déjà. Entre ton PIN pour confirmer que c'est bien toi.";
-    _showAccountEl('accountPseudoWrap','none');
+    _showAccountEl('accountPseudoWrap',false);
     _showAccountEl('accountPinWrap');
+    skipBtn.style.display='block';
+  } else if(mode==='migrate_pin'){
+    // Ancien joueur avec pseudo leaderboard → juste créer un PIN
+    title.textContent='SÉCURISE TON COMPTE';
+    sub.textContent='Bienvenue ' + _accountPendingPseudo + ' ! Crée un code PIN à 4 chiffres pour protéger ton compte.';
+    _showAccountEl('accountPseudoWrap',false);
+    _showAccountEl('accountPinWrap');
+    skipBtn.style.display='block';
+  } else if(mode==='migrate_new'){
+    // Ancien joueur SANS pseudo leaderboard → créer pseudo + PIN
+    title.textContent='CRÉE TON COMPTE';
+    sub.textContent='Nouvelle version ! Crée un pseudo et un PIN pour sauvegarder ta progression.';
+    _showAccountEl('accountPseudoWrap');
+    _showAccountEl('accountPinWrap',false);
     skipBtn.style.display='block';
   }
 
@@ -2106,7 +2122,7 @@ function showAccountPopup(mode){
   popup.style.pointerEvents='all';
 
   // Auto-focus PIN digit 1
-  if(mode==='new_pin'||mode==='recover'||mode==='login_pin'){
+  if(mode==='new_pin'||mode==='recover'||mode==='login_pin'||mode==='migrate_pin'){
     setTimeout(()=>document.getElementById('pin1').focus(),100);
   } else {
     setTimeout(()=>document.getElementById('accountPseudoInput').focus(),100);
@@ -2228,6 +2244,54 @@ document.getElementById('accountBtnOk').addEventListener('click',async e=>{
       SFX.buy(); vib(30);
       setTimeout(()=>{closeAccountPopup();showMenu();}, 1200);
     }catch(e){setAccountStatus('ERREUR RÉSEAU');}
+
+  } else if(_accountStep==='migrate_pin'){
+    // Migration : ancien joueur avec pseudo leaderboard → créer son PIN
+    const pin=_getPin();
+    if(pin.length<4){setAccountStatus('4 CHIFFRES REQUIS');return;}
+    setAccountStatus('CRÉATION...', false);
+    try{
+      const ph=await hashPin(pin);
+      // Vérifier si le pseudo existe déjà dans purchases (cas rare)
+      const{data:existing}=await sb.from('purchases').select('device_id').eq('pseudo',_accountPendingPseudo).maybeSingle();
+      if(existing){
+        // Ligne existe déjà (autre device) → mettre à jour device_id et pin
+        await sb.from('purchases').update({device_id:did,pin_hash:ph,updated_at:new Date().toISOString()}).eq('pseudo',_accountPendingPseudo);
+      } else {
+        // Insérer nouvelle ligne avec données locales
+        await sb.from('purchases').insert({
+          device_id:did, pseudo:_accountPendingPseudo, pin_hash:ph,
+          sc:SV.secondChances||0, coins:SV.coins||0, best:SV.best||0,
+          owned:JSON.stringify(SV.owned||['classic']),
+          upgrades:JSON.stringify(SV.upgrades||{jump:0,gravity:0,speed:0}),
+          equipped:SV.equipped||'classic', streak:SV.streak||0,
+          updated_at:new Date().toISOString()
+        });
+      }
+      localStorage.setItem('fwPseudo',_accountPendingPseudo);
+      setAccountStatus('✓ COMPTE SÉCURISÉ !', false);
+      SFX.buy(); vib(30);
+      setTimeout(closeAccountPopup, 1200);
+    }catch(e){setAccountStatus('ERREUR : '+(e.message||'INCONNU'));}
+
+  } else if(_accountStep==='migrate_new'){
+    // Migration : ancien joueur SANS pseudo → créer pseudo puis PIN
+    const raw=document.getElementById('accountPseudoInput').value.trim();
+    const pseudo=raw.toUpperCase().replace(/[^A-Z0-9_\-]/g,'').slice(0,16);
+    if(pseudo.length<2){setAccountStatus('MIN 2 CARACTÈRES');return;}
+    setAccountStatus('VÉRIFICATION...', false);
+    try{
+      const{data:existing}=await sb.from('purchases').select('device_id').eq('pseudo',pseudo).maybeSingle();
+      if(existing){
+        // Pseudo pris → login_pin
+        _accountPendingPseudo=pseudo;
+        showAccountPopup('login_pin');
+      } else {
+        // Pseudo libre → créer PIN
+        _accountPendingPseudo=pseudo;
+        showAccountPopup('new_pin');
+      }
+    }catch(e){setAccountStatus('ERREUR RÉSEAU');}
   }
 });
 
@@ -2246,10 +2310,23 @@ async function bootAccount(){
     if(data){
       // Compte trouvé → sync normal
       syncFromCloud();
-    } else {
-      // device_id inconnu (app supprimée, nouveau install) → proposer récupération
-      showAccountPopup('recover');
+      return;
     }
+    // Pas de ligne purchases pour ce device_id
+    // → Migration : l'utilisateur avait peut-être déjà un pseudo dans leaderboard
+    const savedPseudo=localStorage.getItem('fwPseudo')||'';
+    if(savedPseudo){
+      // Vérifier si ce pseudo existe dans leaderboard
+      const{data:lbData}=await sb.from('leaderboard').select('pseudo').eq('pseudo',savedPseudo.toUpperCase()).maybeSingle();
+      if(lbData){
+        // Pseudo connu dans leaderboard → migration avec PIN uniquement
+        _accountPendingPseudo=savedPseudo.toUpperCase();
+        showAccountPopup('migrate_pin');
+        return;
+      }
+    }
+    // Pas de pseudo connu → migration complète (pseudo + PIN)
+    showAccountPopup('migrate_new');
   }catch(e){
     // Offline → sync depuis localStorage uniquement, pas de popup
     console.warn('bootAccount offline:', e);
