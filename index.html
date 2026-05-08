@@ -606,7 +606,10 @@ function loadSave(){
   try{const s=JSON.parse(localStorage.getItem('fwv4'));return s?{...DEF_SAVE,...s,upgrades:{...DEF_SAVE.upgrades,...(s.upgrades||{})}}:structuredClone(DEF_SAVE);}
   catch(e){return structuredClone(DEF_SAVE);}
 }
-function saveSave(){try{localStorage.setItem('fwv4',JSON.stringify(SV));}catch(e){}}
+function saveSave(){
+  try{localStorage.setItem('fwv4',JSON.stringify(SV));}catch(e){}
+  if(typeof saveToCloud==='function')saveToCloud();
+}
 let SV=loadSave();
 
 /* ── DAILY ── */
@@ -1935,31 +1938,74 @@ function getDeviceId(){
   return id;
 }
 
-async function syncPurchasesToCloud(){
+/* ── Sauvegarde cloud complète (pièces, SC, skins, upgrades, meilleur score) ── */
+async function syncFromCloud(){
   try{
     const did=getDeviceId();
-    const{data}=await sb.from('purchases').select('sc,coins').eq('device_id',did).maybeSingle();
-    if(data){
-      // Restaurer si les valeurs cloud sont supérieures (protection suppression)
-      if((data.sc||0)>(SV.secondChances||0)){SV.secondChances=data.sc;saveSave();}
-      if((data.coins||0)>(SV.coins||0)){SV.coins=data.coins;saveSave();}
+    const{data}=await sb.from('purchases')
+      .select('sc,coins,best,owned,upgrades,equipped,streak')
+      .eq('device_id',did).maybeSingle();
+    if(!data)return;
+    let changed=false;
+    // On ne restaure que ce qui est SUPÉRIEUR au local (jamais écraser avec moins bien)
+    if((data.sc||0)>(SV.secondChances||0)){SV.secondChances=data.sc;changed=true;}
+    if((data.coins||0)>(SV.coins||0)){SV.coins=data.coins;changed=true;}
+    if((data.best||0)>(SV.best||0)){SV.best=data.best;changed=true;}
+    if((data.streak||0)>(SV.streak||0)){SV.streak=data.streak;changed=true;}
+    // Skins : fusionner (union des deux listes)
+    if(data.owned){
+      try{
+        const cloudOwned=JSON.parse(data.owned);
+        const merged=[...new Set([...(SV.owned||['classic']),...cloudOwned])];
+        if(merged.length>(SV.owned||[]).length){SV.owned=merged;changed=true;}
+      }catch(e){}
     }
-  }catch(e){/* offline, on ignore */}
+    // Upgrades : prendre le max par upgrade
+    if(data.upgrades){
+      try{
+        const cu=JSON.parse(data.upgrades);
+        ['jump','gravity','speed'].forEach(k=>{
+          if((cu[k]||0)>(SV.upgrades[k]||0)){SV.upgrades[k]=cu[k];changed=true;}
+        });
+      }catch(e){}
+    }
+    // Skin équipé : si le skin cloud est dans la liste owned fusionnée, on le garde
+    if(data.equipped&&SV.owned.includes(data.equipped)&&data.equipped!==SV.equipped){
+      SV.equipped=data.equipped;changed=true;
+    }
+    if(changed){saveSave();console.log('☁️ Données cloud restaurées');}
+  }catch(e){/* offline */}
 }
 
-async function savePurchaseToCloud(){
-  try{
-    const did=getDeviceId();
-    await sb.from('purchases').upsert(
-      {device_id:did, sc:SV.secondChances||0, coins:SV.coins||0, updated_at:new Date().toISOString()},
-      {onConflict:'device_id'}
-    );
-  }catch(e){/* offline, on ignore */}
+let _cloudSaveTimer=null;
+async function saveToCloud(){
+  // Debounce : attend 3s sans nouvel appel avant d'envoyer (évite le spam)
+  clearTimeout(_cloudSaveTimer);
+  _cloudSaveTimer=setTimeout(async()=>{
+    try{
+      const did=getDeviceId();
+      await sb.from('purchases').upsert({
+        device_id : did,
+        sc        : SV.secondChances||0,
+        coins     : SV.coins||0,
+        best      : SV.best||0,
+        owned     : JSON.stringify(SV.owned||['classic']),
+        upgrades  : JSON.stringify(SV.upgrades||{jump:0,gravity:0,speed:0}),
+        equipped  : SV.equipped||'classic',
+        streak    : SV.streak||0,
+        updated_at: new Date().toISOString()
+      },{onConflict:'device_id'});
+      console.log('☁️ Sauvegarde cloud OK');
+    }catch(e){/* offline, le localStorage garde tout */}
+  },3000);
 }
 
-// Sync au démarrage
-setTimeout(syncPurchasesToCloud,1500);
-window.addEventListener('online',syncPurchasesToCloud);
+// Compatibilité ancienne fonction (appelée après achats PayPal)
+const savePurchaseToCloud=saveToCloud;
+
+// Sync au démarrage + retour en ligne
+setTimeout(syncFromCloud,1500);
+window.addEventListener('online',()=>{syncFromCloud();saveToCloud();});
 
 function createPayPalButton(containerId, amount, label, onSuccess){
   const container = document.getElementById(containerId);
