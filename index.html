@@ -406,6 +406,35 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   </div>
 </div>
 
+<!-- ACCOUNT POPUP (inscription / connexion) -->
+<div id="accountPopup" style="
+  position:fixed;inset:0;background:rgba(6,6,15,.98);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;z-index:110;opacity:0;pointer-events:none;transition:opacity .4s;
+  padding:20px;
+">
+  <div style="font-size:clamp(24px,7vw,40px);">&#x1F3AE;</div>
+  <div id="accountTitle" style="font-size:clamp(11px,3vw,16px);color:var(--cy);text-align:center;line-height:1.8;"></div>
+  <div id="accountSub" style="font-size:clamp(7px,2vw,10px);color:rgba(255,255,255,.5);text-align:center;max-width:300px;line-height:2;"></div>
+  <div id="accountPseudoWrap" style="width:100%;max-width:300px;display:none;flex-direction:column;gap:8px;">
+    <input id="accountPseudoInput" maxlength="16" placeholder="TON PSEUDO (2-16 car.)..." autocomplete="off" spellcheck="false" style="font-family:'Press Start 2P',monospace;font-size:clamp(9px,2.5vw,12px);background:rgba(255,255,255,.06);border:1.5px solid rgba(0,245,255,.4);color:#fff;padding:11px 14px;border-radius:5px;width:100%;text-align:center;outline:none;letter-spacing:2px;"/>
+  </div>
+  <div id="accountPinWrap" style="width:100%;max-width:300px;display:none;flex-direction:column;gap:8px;align-items:center;">
+    <div style="font-size:clamp(6px,1.7vw,9px);color:rgba(255,255,255,.4);text-align:center;">PIN 4 CHIFFRES &#x2014; RETIENS-LE BIEN !</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <input id="pin1" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
+      <input id="pin2" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
+      <input id="pin3" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
+      <input id="pin4" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
+    </div>
+  </div>
+  <div id="accountStatus" style="font-size:clamp(6px,1.7vw,9px);color:var(--pk);min-height:16px;text-align:center;letter-spacing:1px;"></div>
+  <div class="btn-row">
+    <button class="btn yw" id="accountBtnOk">&#x2713; VALIDER</button>
+    <button class="btn" id="accountBtnSkip" style="display:none;">PLUS TARD</button>
+  </div>
+</div>
+
 <!-- SECOND CHANCE POPUP -->
 <div id="scPopup" style="
   position:fixed;inset:0;background:rgba(0,0,0,.9);
@@ -1457,7 +1486,7 @@ class Game{
           document.getElementById('hudBest').textContent=SV.best>0?'↑'+SV.best:'';
           showCoinFloat(this.bird.x,this.bird.y-this.bsz,earned);SFX.coin();
 
-          if(this.score>=93&&!SV.ninjaUnlocked){SV.ninjaUnlocked=true;saveSave();this._unlockNinja();}
+          if(this.score>=93&&!SV.ninjaUnlocked){SV.ninjaUnlocked=true;saveSave();this._ninjaUnlockPending=true;}
           if(this.score%20===0){
             this.wi=Math.min(this.wi+1,WORLDS.length-1);
             this.wt=0;this.wTransing=true;this.wLabelT=120;
@@ -1507,9 +1536,10 @@ class Game{
   }
 
   _unlockNinja(){
+    // Appelé uniquement après le game over (via _showDeadScreenFinal)
     if(SV.ninjaNotified)return;
     SV.ninjaNotified=true;saveSave();SFX.ninja();
-    setTimeout(()=>document.getElementById('ninjaUnlock').classList.add('show'),1500);
+    setTimeout(()=>document.getElementById('ninjaUnlock').classList.add('show'),600);
   }
 
   drawBg(){
@@ -1599,6 +1629,8 @@ function _showDeadScreenFinal(score,coins){
   const scInfoEl=document.getElementById('deadSCInfo');
   if(scInfoEl)scInfoEl.textContent=sc>0?'❤️ '+sc+' seconde(s) chance(s) dispo':'';
   showScreen('deadScreen');
+  // Afficher le popup ninja uniquement ici, après le game over
+  if(game._ninjaUnlockPending){game._ninjaUnlockPending=false;game._unlockNinja();}
 }
 function showMenu(){
   document.getElementById('menuCoins').textContent='🪙 '+SV.coins+' PIÈCES';
@@ -1928,64 +1960,72 @@ async function flushPendingScore(){
 window.addEventListener('online',flushPendingScore);
 setTimeout(flushPendingScore,2000);
 
-/* ── Bug 2 fix : achats sauvegardés sur Supabase ──
-   Table attendue : purchases(device_id text, sc int, coins int, updated_at timestamptz)
-   La clé device_id est générée et stockée en localStorage.
-*/
+/* ════════════════════════════════════════
+   SYSTÈME DE COMPTE (device_id + pseudo + PIN)
+   Table purchases : device_id, pseudo, pin_hash, sc, coins, best,
+                     owned, upgrades, equipped, streak, updated_at
+════════════════════════════════════════ */
+
+// ── Hash PIN (SHA-256 simple via Web Crypto) ──
+async function hashPin(pin){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Récupère ou génère le device_id ──
 function getDeviceId(){
   let id=localStorage.getItem('fwDeviceId');
   if(!id){id=crypto.randomUUID();localStorage.setItem('fwDeviceId',id);}
   return id;
 }
 
-/* ── Sauvegarde cloud complète (pièces, SC, skins, upgrades, meilleur score) ── */
+// ── Restaure les données depuis la ligne cloud ──
+function _applyCloudData(data){
+  let changed=false;
+  if((data.sc||0)>(SV.secondChances||0)){SV.secondChances=data.sc;changed=true;}
+  if((data.coins||0)>(SV.coins||0)){SV.coins=data.coins;changed=true;}
+  if((data.best||0)>(SV.best||0)){SV.best=data.best;changed=true;}
+  if((data.streak||0)>(SV.streak||0)){SV.streak=data.streak;changed=true;}
+  if(data.owned){try{
+    const co=JSON.parse(data.owned);
+    const merged=[...new Set([...(SV.owned||['classic']),...co])];
+    if(merged.length>(SV.owned||[]).length){SV.owned=merged;changed=true;}
+  }catch(e){}}
+  if(data.upgrades){try{
+    const cu=JSON.parse(data.upgrades);
+    ['jump','gravity','speed'].forEach(k=>{
+      if((cu[k]||0)>(SV.upgrades[k]||0)){SV.upgrades[k]=cu[k];changed=true;}
+    });
+  }catch(e){}}
+  if(data.equipped&&SV.owned.includes(data.equipped)&&data.equipped!==SV.equipped){
+    SV.equipped=data.equipped;changed=true;
+  }
+  if(changed){saveSave();console.log('☁️ Données cloud restaurées');}
+}
+
+// ── Sync au démarrage : cherche par device_id uniquement ──
 async function syncFromCloud(){
   try{
     const did=getDeviceId();
     const{data}=await sb.from('purchases')
       .select('sc,coins,best,owned,upgrades,equipped,streak')
       .eq('device_id',did).maybeSingle();
-    if(!data)return;
-    let changed=false;
-    // On ne restaure que ce qui est SUPÉRIEUR au local (jamais écraser avec moins bien)
-    if((data.sc||0)>(SV.secondChances||0)){SV.secondChances=data.sc;changed=true;}
-    if((data.coins||0)>(SV.coins||0)){SV.coins=data.coins;changed=true;}
-    if((data.best||0)>(SV.best||0)){SV.best=data.best;changed=true;}
-    if((data.streak||0)>(SV.streak||0)){SV.streak=data.streak;changed=true;}
-    // Skins : fusionner (union des deux listes)
-    if(data.owned){
-      try{
-        const cloudOwned=JSON.parse(data.owned);
-        const merged=[...new Set([...(SV.owned||['classic']),...cloudOwned])];
-        if(merged.length>(SV.owned||[]).length){SV.owned=merged;changed=true;}
-      }catch(e){}
-    }
-    // Upgrades : prendre le max par upgrade
-    if(data.upgrades){
-      try{
-        const cu=JSON.parse(data.upgrades);
-        ['jump','gravity','speed'].forEach(k=>{
-          if((cu[k]||0)>(SV.upgrades[k]||0)){SV.upgrades[k]=cu[k];changed=true;}
-        });
-      }catch(e){}
-    }
-    // Skin équipé : si le skin cloud est dans la liste owned fusionnée, on le garde
-    if(data.equipped&&SV.owned.includes(data.equipped)&&data.equipped!==SV.equipped){
-      SV.equipped=data.equipped;changed=true;
-    }
-    if(changed){saveSave();console.log('☁️ Données cloud restaurées');}
-  }catch(e){/* offline */}
+    if(data)_applyCloudData(data);
+  }catch(e){console.warn('syncFromCloud:',e);}
 }
 
+// ── Sauvegarde cloud (debounced 3s) ──
 let _cloudSaveTimer=null;
 async function saveToCloud(){
-  // Debounce : attend 3s sans nouvel appel avant d'envoyer (évite le spam)
   clearTimeout(_cloudSaveTimer);
   _cloudSaveTimer=setTimeout(async()=>{
+    const did=getDeviceId();
+    if(!localStorage.getItem('fwPseudo'))return; // pas encore de compte
     try{
-      const did=getDeviceId();
+      const pseudo=(localStorage.getItem('fwPseudo')||'').toUpperCase();
       await sb.from('purchases').upsert({
         device_id : did,
+        pseudo    : pseudo,
         sc        : SV.secondChances||0,
         coins     : SV.coins||0,
         best      : SV.best||0,
@@ -1995,17 +2035,230 @@ async function saveToCloud(){
         streak    : SV.streak||0,
         updated_at: new Date().toISOString()
       },{onConflict:'device_id'});
-      console.log('☁️ Sauvegarde cloud OK');
-    }catch(e){/* offline, le localStorage garde tout */}
+    }catch(e){}
   },3000);
 }
-
-// Compatibilité ancienne fonction (appelée après achats PayPal)
 const savePurchaseToCloud=saveToCloud;
 
-// Sync au démarrage + retour en ligne
-setTimeout(syncFromCloud,1500);
+/* ════════════════════════════════════════
+   POPUP COMPTE : inscription / connexion
+════════════════════════════════════════ */
+// Flux :
+// 1. Pas de device_id en localStorage → première ouverture → showAccountPopup('new')
+// 2. device_id présent mais pas de ligne en DB (app supprimée) → showAccountPopup('recover')
+// 3. device_id + ligne DB → syncFromCloud normal, pas de popup
+
+let _accountStep = ''; // 'new' | 'recover' | 'login_pin'
+let _accountPendingPseudo = '';
+
+function _getPin(){
+  return ['pin1','pin2','pin3','pin4'].map(id=>document.getElementById(id).value).join('');
+}
+function _clearPin(){
+  ['pin1','pin2','pin3','pin4'].forEach(id=>{document.getElementById(id).value='';});
+}
+function _showAccountEl(elId,flex=true){
+  const el=document.getElementById(elId);
+  el.style.display=flex?'flex':'none';
+}
+function setAccountStatus(msg,isErr=true){
+  const el=document.getElementById('accountStatus');
+  el.textContent=msg;
+  el.style.color=isErr?'var(--pk)':'var(--gn)';
+}
+
+function showAccountPopup(mode){
+  _accountStep=mode;
+  const popup=document.getElementById('accountPopup');
+  const title=document.getElementById('accountTitle');
+  const sub=document.getElementById('accountSub');
+  const skipBtn=document.getElementById('accountBtnSkip');
+  setAccountStatus('');
+  _clearPin();
+
+  if(mode==='new'){
+    title.textContent='BIENVENUE !';
+    sub.textContent='Choisis un pseudo pour sauvegarder ta progression et apparaître au classement.';
+    _showAccountEl('accountPseudoWrap');
+    _showAccountEl('accountPinWrap','none');
+    skipBtn.style.display='block'; // peut jouer sans compte
+  } else if(mode==='new_pin'){
+    title.textContent='CRÉE TON PIN';
+    sub.textContent='Retiens bien ce code à 4 chiffres. Il te permettra de récupérer ton compte.';
+    _showAccountEl('accountPseudoWrap','none');
+    _showAccountEl('accountPinWrap');
+    skipBtn.style.display='none';
+  } else if(mode==='recover'){
+    title.textContent='COMPTE INTROUVABLE';
+    sub.textContent='Ton appareil n'est pas reconnu. Entre ton pseudo + PIN pour récupérer tes données, ou crée un nouveau compte.';
+    _showAccountEl('accountPseudoWrap');
+    _showAccountEl('accountPinWrap');
+    skipBtn.style.display='block';
+  } else if(mode==='login_pin'){
+    title.textContent='PSEUDO DÉJÀ PRIS';
+    sub.textContent='Ce pseudo existe déjà. Entre ton PIN pour confirmer que c'est bien toi.';
+    _showAccountEl('accountPseudoWrap','none');
+    _showAccountEl('accountPinWrap');
+    skipBtn.style.display='block';
+  }
+
+  popup.style.opacity='1';
+  popup.style.pointerEvents='all';
+
+  // Auto-focus PIN digit 1
+  if(mode==='new_pin'||mode==='recover'||mode==='login_pin'){
+    setTimeout(()=>document.getElementById('pin1').focus(),100);
+  } else {
+    setTimeout(()=>document.getElementById('accountPseudoInput').focus(),100);
+  }
+}
+
+function closeAccountPopup(){
+  const popup=document.getElementById('accountPopup');
+  popup.style.opacity='0';
+  popup.style.pointerEvents='none';
+}
+
+// Navigation PIN : passe au champ suivant automatiquement
+['pin1','pin2','pin3','pin4'].forEach((id,i,arr)=>{
+  document.getElementById(id).addEventListener('input',function(){
+    this.value=this.value.replace(/[^0-9]/g,'').slice(-1);
+    if(this.value&&i<arr.length-1)document.getElementById(arr[i+1]).focus();
+  });
+  document.getElementById(id).addEventListener('keydown',function(e){
+    if(e.key==='Backspace'&&!this.value&&i>0)document.getElementById(arr[i-1]).focus();
+  });
+});
+
+// Bouton PLUS TARD
+document.getElementById('accountBtnSkip').addEventListener('click',e=>{
+  e.stopPropagation();
+  closeAccountPopup();
+  // Joue sans compte, syncFromCloud normal
+  syncFromCloud();
+});
+
+// Bouton VALIDER
+document.getElementById('accountBtnOk').addEventListener('click',async e=>{
+  e.stopPropagation();
+  const did=getDeviceId();
+  const statusEl=document.getElementById('accountStatus');
+
+  if(_accountStep==='new'){
+    // Valider le pseudo
+    const raw=document.getElementById('accountPseudoInput').value.trim();
+    const pseudo=raw.toUpperCase().replace(/[^A-Z0-9_\-]/g,'').slice(0,16);
+    if(pseudo.length<2){setAccountStatus('MIN 2 CARACTÈRES');return;}
+    setAccountStatus('VÉRIFICATION...', false);
+
+    try{
+      const{data:existing}=await sb.from('purchases').select('device_id,pin_hash').eq('pseudo',pseudo).maybeSingle();
+      if(!existing){
+        // Pseudo libre → passer à création PIN
+        _accountPendingPseudo=pseudo;
+        showAccountPopup('new_pin');
+      } else {
+        // Pseudo pris → demander PIN pour login
+        _accountPendingPseudo=pseudo;
+        showAccountPopup('login_pin');
+      }
+    }catch(e){setAccountStatus('ERREUR RÉSEAU');}
+
+  } else if(_accountStep==='new_pin'){
+    // Créer compte avec pseudo + PIN
+    const pin=_getPin();
+    if(pin.length<4){setAccountStatus('4 CHIFFRES REQUIS');return;}
+    setAccountStatus('CRÉATION...', false);
+    try{
+      const ph=await hashPin(pin);
+      await sb.from('purchases').insert({
+        device_id:did, pseudo:_accountPendingPseudo, pin_hash:ph,
+        sc:SV.secondChances||0, coins:SV.coins||0, best:SV.best||0,
+        owned:JSON.stringify(SV.owned||['classic']),
+        upgrades:JSON.stringify(SV.upgrades||{jump:0,gravity:0,speed:0}),
+        equipped:SV.equipped||'classic', streak:SV.streak||0,
+        updated_at:new Date().toISOString()
+      });
+      localStorage.setItem('fwPseudo',_accountPendingPseudo);
+      setAccountStatus('✓ COMPTE CRÉÉ !', false);
+      SFX.buy(); vib(30);
+      setTimeout(closeAccountPopup, 1200);
+    }catch(e){setAccountStatus('ERREUR : '+( e.message||'INCONNU'));}
+
+  } else if(_accountStep==='login_pin'){
+    // Connexion : vérifier PIN
+    const pin=_getPin();
+    if(pin.length<4){setAccountStatus('4 CHIFFRES REQUIS');return;}
+    setAccountStatus('VÉRIFICATION...', false);
+    try{
+      const ph=await hashPin(pin);
+      const{data}=await sb.from('purchases')
+        .select('pin_hash,sc,coins,best,owned,upgrades,equipped,streak')
+        .eq('pseudo',_accountPendingPseudo).maybeSingle();
+      if(!data){setAccountStatus('COMPTE INTROUVABLE');return;}
+      if(data.pin_hash!==ph){setAccountStatus('PIN INCORRECT');_clearPin();return;}
+      // PIN OK → mettre à jour device_id + restaurer données
+      await sb.from('purchases').update({device_id:did,updated_at:new Date().toISOString()}).eq('pseudo',_accountPendingPseudo);
+      localStorage.setItem('fwPseudo',_accountPendingPseudo);
+      _applyCloudData(data);
+      setAccountStatus('✓ COMPTE RÉCUPÉRÉ !', false);
+      SFX.buy(); vib(30);
+      setTimeout(()=>{closeAccountPopup();showMenu();}, 1200);
+    }catch(e){setAccountStatus('ERREUR RÉSEAU');}
+
+  } else if(_accountStep==='recover'){
+    // Récupération : pseudo + PIN ensemble
+    const raw=document.getElementById('accountPseudoInput').value.trim();
+    const pseudo=raw.toUpperCase().replace(/[^A-Z0-9_\-]/g,'').slice(0,16);
+    const pin=_getPin();
+    if(pseudo.length<2){setAccountStatus('MIN 2 CARACTÈRES PSEUDO');return;}
+    if(pin.length<4){setAccountStatus('4 CHIFFRES PIN REQUIS');return;}
+    setAccountStatus('VÉRIFICATION...', false);
+    try{
+      const ph=await hashPin(pin);
+      const{data}=await sb.from('purchases')
+        .select('pin_hash,sc,coins,best,owned,upgrades,equipped,streak')
+        .eq('pseudo',pseudo).maybeSingle();
+      if(!data){setAccountStatus('PSEUDO INTROUVABLE');return;}
+      if(data.pin_hash!==ph){setAccountStatus('PIN INCORRECT');_clearPin();return;}
+      await sb.from('purchases').update({device_id:did,updated_at:new Date().toISOString()}).eq('pseudo',pseudo);
+      localStorage.setItem('fwPseudo',pseudo);
+      _applyCloudData(data);
+      setAccountStatus('✓ DONNÉES RÉCUPÉRÉES !', false);
+      SFX.buy(); vib(30);
+      setTimeout(()=>{closeAccountPopup();showMenu();}, 1200);
+    }catch(e){setAccountStatus('ERREUR RÉSEAU');}
+  }
+});
+
+// ── Boot : décide si on affiche le popup compte ──
+async function bootAccount(){
+  const did=localStorage.getItem('fwDeviceId');
+  if(!did){
+    // Première ouverture absolue → créer device_id et demander pseudo
+    getDeviceId();
+    showAccountPopup('new');
+    return;
+  }
+  // device_id présent → chercher en DB
+  try{
+    const{data}=await sb.from('purchases').select('device_id').eq('device_id',did).maybeSingle();
+    if(data){
+      // Compte trouvé → sync normal
+      syncFromCloud();
+    } else {
+      // device_id inconnu (app supprimée, nouveau install) → proposer récupération
+      showAccountPopup('recover');
+    }
+  }catch(e){
+    // Offline → sync depuis localStorage uniquement, pas de popup
+    console.warn('bootAccount offline:', e);
+  }
+}
+
+// Lancer au démarrage
 window.addEventListener('online',()=>{syncFromCloud();saveToCloud();});
+setTimeout(bootAccount, 500);
 
 function createPayPalButton(containerId, amount, label, onSuccess){
   const container = document.getElementById(containerId);
