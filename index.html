@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#06060f"/>
@@ -38,15 +38,47 @@ if('serviceWorker' in navigator){
 :root{
   --cy:#00f5ff;--pk:#ff006e;--gn:#39ff14;--yw:#ffe600;--pu:#cc00ff;
   --bg:#06060f;
+  /* Safe areas pour iPhone avec encoche / Dynamic Island / home indicator */
   --safe-top:env(safe-area-inset-top,12px);
-  --safe-bot:env(safe-area-inset-bottom,10px);
+  --safe-bot:env(safe-area-inset-bottom,20px);
+  --safe-left:env(safe-area-inset-left,0px);
+  --safe-right:env(safe-area-inset-right,0px);
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
-  font-family:'Press Start 2P',monospace;touch-action:none;
-  user-select:none;-webkit-user-select:none;}
-canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw;}
-#gameWrapper{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+html{
+  height:100%;
+  /* Empêche le bounce scroll sur iOS */
+  -webkit-overflow-scrolling:touch;
+  overflow:hidden;
+}
+body{
+  width:100%;height:100%;
+  overflow:hidden;background:var(--bg);
+  font-family:'Press Start 2P',monospace;
+  touch-action:none;
+  user-select:none;-webkit-user-select:none;
+  /* Couvre toute la surface y compris sous l'encoche */
+  padding-top:0;
+  padding-bottom:0;
+}
+canvas{
+  display:block;
+  image-rendering:pixelated;
+  /* 100dvh = hauteur visible dynamique (tient compte de la barre Safari) */
+  max-height:100dvh;
+  max-width:100vw;
+  /* Touch events directs sur le canvas */
+  touch-action:none;
+}
+#gameWrapper{
+  position:fixed;
+  /* inset:0 = top/right/bottom/left:0 — couvre tout l'écran */
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--bg);
+}
 
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;}
@@ -66,6 +98,10 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 .screen{
   position:fixed;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:12px;
+  padding-top:var(--safe-top);
+  padding-bottom:var(--safe-bot);
+  padding-left:var(--safe-left);
+  padding-right:var(--safe-right);
   transition:opacity .35s;
 }
 .screen.hidden{opacity:0;pointer-events:none;}
@@ -103,7 +139,10 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   display:flex;flex-direction:column;align-items:center;
   padding:clamp(10px,3vw,20px);
   padding-top:calc(var(--safe-top) + 14px);
-  overflow-y:auto;opacity:0;pointer-events:none;
+  padding-bottom:calc(var(--safe-bot) + 14px);
+  /* scroll fluide iOS */
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  opacity:0;pointer-events:none;
   transition:opacity .3s;z-index:60;
 }
 .overlay.open{opacity:1;pointer-events:all;}
@@ -163,7 +202,7 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   position:fixed;top:0;left:0;right:0;
   background:linear-gradient(135deg,rgba(57,255,20,.15),rgba(0,245,255,.12));
   border-bottom:1px solid rgba(57,255,20,.3);
-  padding:calc(var(--safe-top) + 8px) 16px 10px;
+  padding:calc(var(--safe-top) + 8px) calc(var(--safe-right) + 16px) 10px calc(var(--safe-left) + 16px);
   text-align:center;z-index:80;
   transform:translateY(-100%);transition:transform .5s cubic-bezier(.17,.67,.35,1.1);
 }
@@ -180,6 +219,10 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   position:fixed;inset:0;background:rgba(0,0,0,.92);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   z-index:90;opacity:0;pointer-events:none;transition:opacity .4s;
+  padding-top:var(--safe-top);
+  padding-bottom:var(--safe-bot);
+  padding-left:var(--safe-left);
+  padding-right:var(--safe-right);
 }
 #ninjaUnlock.show{opacity:1;pointer-events:all;}
 #ninjaUnlock .ninja-title{font-size:clamp(16px,5vw,26px);color:#fff;text-align:center;line-height:1.8;animation:pulse 1s ease-in-out infinite;}
@@ -217,7 +260,9 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   display:flex;flex-direction:column;align-items:center;
   padding:clamp(10px,3vw,20px);
   padding-top:calc(var(--safe-top) + 14px);
-  overflow-y:auto;opacity:0;pointer-events:none;
+  padding-bottom:calc(var(--safe-bot) + 14px);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  opacity:0;pointer-events:none;
   transition:opacity .3s;z-index:60;
 }
 #lbOverlay.open{opacity:1;pointer-events:all;}
@@ -412,6 +457,10 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:14px;z-index:110;opacity:0;pointer-events:none;transition:opacity .4s;
   padding:20px;
+  padding-top:calc(env(safe-area-inset-top,12px) + 20px);
+  padding-bottom:calc(env(safe-area-inset-bottom,20px) + 20px);
+  padding-left:calc(env(safe-area-inset-left,0px) + 20px);
+  padding-right:calc(env(safe-area-inset-right,0px) + 20px);
 ">
   <div style="font-size:clamp(24px,7vw,40px);">&#x1F3AE;</div>
   <div id="accountTitle" style="font-size:clamp(11px,3vw,16px);color:var(--cy);text-align:center;line-height:1.8;"></div>
@@ -421,11 +470,15 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   </div>
   <div id="accountPinWrap" style="width:100%;max-width:300px;display:none;flex-direction:column;gap:8px;align-items:center;">
     <div style="font-size:clamp(6px,1.7vw,9px);color:rgba(255,255,255,.4);text-align:center;">PIN 4 CHIFFRES &#x2014; RETIENS-LE BIEN !</div>
-    <div style="display:flex;gap:10px;justify-content:center;">
-      <input id="pin1" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
-      <input id="pin2" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
-      <input id="pin3" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
-      <input id="pin4" type="tel" maxlength="1" inputmode="numeric" style="width:48px;height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;outline:none;"/>
+    <!-- Input caché unique pour compatibilité clavier Android -->
+    <input id="pinHidden" type="tel" inputmode="numeric" maxlength="4" autocomplete="one-time-code"
+      style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;" />
+    <!-- Affichage visuel des 4 cases cliquables -->
+    <div id="pinDisplay" style="display:flex;gap:10px;justify-content:center;cursor:text;" onclick="document.getElementById('pinHidden').focus();">
+      <div id="pin1" style="width:48px;height:56px;line-height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;"></div>
+      <div id="pin2" style="width:48px;height:56px;line-height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;"></div>
+      <div id="pin3" style="width:48px;height:56px;line-height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;"></div>
+      <div id="pin4" style="width:48px;height:56px;line-height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;"></div>
     </div>
   </div>
   <div id="accountStatus" style="font-size:clamp(6px,1.7vw,9px);color:var(--pk);min-height:16px;text-align:center;letter-spacing:1px;"></div>
@@ -440,6 +493,8 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   position:fixed;inset:0;background:rgba(0,0,0,.9);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:16px;z-index:100;opacity:0;pointer-events:none;transition:opacity .4s;
+  padding-top:env(safe-area-inset-top,12px);
+  padding-bottom:env(safe-area-inset-bottom,20px);
 ">
   <div style="font-size:clamp(30px,9vw,50px);">❤️</div>
   <div style="font-size:clamp(12px,3.5vw,18px);color:var(--pk);text-align:center;line-height:1.8;">CONTINUE ?</div>
@@ -2054,10 +2109,16 @@ let _accountStep = ''; // 'new' | 'new_pin' | 'recover' | 'login_pin' | 'migrate
 let _accountPendingPseudo = '';
 
 function _getPin(){
-  return ['pin1','pin2','pin3','pin4'].map(id=>document.getElementById(id).value).join('');
+  return (document.getElementById('pinHidden').value||'').replace(/[^0-9]/g,'').slice(0,4);
 }
 function _clearPin(){
-  ['pin1','pin2','pin3','pin4'].forEach(id=>{document.getElementById(id).value='';});
+  const h=document.getElementById('pinHidden');
+  h.value='';
+  ['pin1','pin2','pin3','pin4'].forEach(id=>{
+    const d=document.getElementById(id);
+    d.textContent='';
+    d.style.borderColor='rgba(0,245,255,.4)';
+  });
 }
 function _showAccountEl(elId,flex=true){
   const el=document.getElementById(elId);
@@ -2121,11 +2182,17 @@ function showAccountPopup(mode){
   popup.style.opacity='1';
   popup.style.pointerEvents='all';
 
-  // Auto-focus PIN digit 1
+  // Auto-focus : sur pinHidden pour déclencher le clavier (y compris Android)
   if(mode==='new_pin'||mode==='recover'||mode==='login_pin'||mode==='migrate_pin'){
-    setTimeout(()=>document.getElementById('pin1').focus(),100);
+    // Petit délai pour laisser le DOM s'afficher avant le focus
+    setTimeout(()=>{ 
+      const h=document.getElementById('pinHidden');
+      h.focus();
+      // Trick Android : on simule un clic pour forcer le clavier
+      try{ h.click(); } catch(e){}
+    }, 150);
   } else {
-    setTimeout(()=>document.getElementById('accountPseudoInput').focus(),100);
+    setTimeout(()=>document.getElementById('accountPseudoInput').focus(), 150);
   }
 }
 
@@ -2135,16 +2202,25 @@ function closeAccountPopup(){
   popup.style.pointerEvents='none';
 }
 
-// Navigation PIN : passe au champ suivant automatiquement
-['pin1','pin2','pin3','pin4'].forEach((id,i,arr)=>{
-  document.getElementById(id).addEventListener('input',function(){
-    this.value=this.value.replace(/[^0-9]/g,'').slice(-1);
-    if(this.value&&i<arr.length-1)document.getElementById(arr[i+1]).focus();
-  });
-  document.getElementById(id).addEventListener('keydown',function(e){
-    if(e.key==='Backspace'&&!this.value&&i>0)document.getElementById(arr[i-1]).focus();
-  });
-});
+// PIN : input caché unique → mise à jour affichage visuel (compatible Android)
+(function(){
+  const hidden = document.getElementById('pinHidden');
+  const dots = ['pin1','pin2','pin3','pin4'].map(id=>document.getElementById(id));
+
+  function updateDisplay(){
+    const val = hidden.value.replace(/[^0-9]/g,'').slice(0,4);
+    hidden.value = val;
+    dots.forEach((d,i)=>{
+      d.textContent = val[i] ? '●' : '';
+      d.style.borderColor = i===val.length && val.length<4
+        ? 'rgba(0,245,255,1)' : 'rgba(0,245,255,.4)';
+    });
+  }
+
+  hidden.addEventListener('input', updateDisplay);
+  // Clic sur les cases → focus input caché (ouvre le clavier sur Android)
+  document.getElementById('pinDisplay').addEventListener('click', ()=>{ hidden.focus(); });
+})();
 
 // Bouton PLUS TARD
 document.getElementById('accountBtnSkip').addEventListener('click',e=>{
@@ -2159,6 +2235,12 @@ document.getElementById('accountBtnOk').addEventListener('click',async e=>{
   e.stopPropagation();
   const did=getDeviceId();
   const statusEl=document.getElementById('accountStatus');
+
+  // Guard : si bootAccount n'a pas encore fini, on attend
+  if(!_accountStep){
+    setAccountStatus('CHARGEMENT...', false);
+    return;
+  }
 
   if(_accountStep==='new'){
     // Valider le pseudo
@@ -2318,54 +2400,54 @@ document.getElementById('accountBtnOk').addEventListener('click',async e=>{
 async function bootAccount(){
   const did=localStorage.getItem('fwDeviceId');
   if(!did){
-    // Première ouverture absolue → créer device_id et demander pseudo
     getDeviceId();
     showAccountPopup('new');
     return;
   }
-  // device_id présent → chercher en DB
   try{
     const{data}=await sb.from('purchases')
       .select('device_id,pseudo,pin_hash')
       .eq('device_id',did).maybeSingle();
 
     if(data){
-      // Ligne trouvée — vérifier si pseudo + PIN sont définis
       if(data.pseudo && data.pin_hash){
-        // Compte complet → sync normal
+        // Compte complet → sync normal, pas de popup
         syncFromCloud();
+        return;
+      }
+      // Ligne sans pseudo/PIN (ancien utilisateur)
+      // Priorité : pseudo dans la ligne DB > localStorage > migrate_new
+      const dbPseudo=(data.pseudo||'').trim();
+      const localPseudo=(localStorage.getItem('fwPseudo')||'').trim();
+      const bestPseudo=(dbPseudo||localPseudo).toUpperCase();
+      if(bestPseudo){
+        _accountPendingPseudo=bestPseudo;
+        showAccountPopup('migrate_pin');
       } else {
-        // Ligne existe mais sans pseudo/PIN (ancien utilisateur avant système PIN)
-        // Chercher si un pseudo est stocké localement ou dans leaderboard
-        const savedPseudo=localStorage.getItem('fwPseudo')||'';
-        if(savedPseudo){
-          // A déjà soumis un score → on propose de sécuriser avec ce pseudo
-          _accountPendingPseudo=savedPseudo.toUpperCase();
-          showAccountPopup('migrate_pin');
-        } else {
-          // Aucun pseudo nulle part → créer pseudo + PIN
-          showAccountPopup('migrate_new');
-        }
+        showAccountPopup('migrate_new');
       }
       return;
     }
 
-    // Pas de ligne purchases pour ce device_id du tout
-    // → Vérifier si pseudo local connu dans leaderboard
-    const savedPseudo=localStorage.getItem('fwPseudo')||'';
-    if(savedPseudo){
-      const{data:lbData}=await sb.from('leaderboard').select('pseudo').eq('pseudo',savedPseudo.toUpperCase()).maybeSingle();
+    // Aucune ligne purchases pour ce device_id
+    const localPseudo=(localStorage.getItem('fwPseudo')||'').trim();
+    if(localPseudo){
+      const{data:lbData}=await sb.from('leaderboard').select('pseudo').eq('pseudo',localPseudo.toUpperCase()).maybeSingle();
       if(lbData){
-        _accountPendingPseudo=savedPseudo.toUpperCase();
+        _accountPendingPseudo=localPseudo.toUpperCase();
         showAccountPopup('migrate_pin');
         return;
       }
+      // Pseudo local mais pas dans leaderboard → propose quand même migrate_pin avec ce pseudo
+      _accountPendingPseudo=localPseudo.toUpperCase();
+      showAccountPopup('migrate_pin');
+      return;
     }
-    // Vraiment nouveau → créer pseudo + PIN
-    showAccountPopup('migrate_new');
+    // Vraiment nouveau
+    showAccountPopup('new');
   }catch(e){
-    // Offline → pas de popup
     console.warn('bootAccount offline:', e);
+    // Offline : si on a un device_id connu, on laisse jouer sans popup
   }
 }
 
