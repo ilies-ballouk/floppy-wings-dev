@@ -472,9 +472,9 @@ canvas{
     <div style="font-size:clamp(6px,1.7vw,9px);color:rgba(255,255,255,.4);text-align:center;">PIN 4 CHIFFRES &#x2014; RETIENS-LE BIEN !</div>
     <!-- Input caché unique pour compatibilité clavier Android -->
     <input id="pinHidden" type="tel" inputmode="numeric" maxlength="4" autocomplete="one-time-code"
-      style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;" />
+      style="position:absolute;opacity:0;width:1px;height:1px;" />
     <!-- Affichage visuel des 4 cases cliquables -->
-    <div id="pinDisplay" style="display:flex;gap:10px;justify-content:center;cursor:text;" onclick="document.getElementById('pinHidden').focus();">
+    <div id="pinDisplay" style="display:flex;gap:10px;justify-content:center;cursor:text;" onclick="(function(){var h=document.getElementById('pinHidden');h.removeAttribute('disabled');h.focus();try{h.click();}catch(e){}})();">
       <div id="pin1" style="width:48px;height:56px;line-height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;"></div>
       <div id="pin2" style="width:48px;height:56px;line-height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;"></div>
       <div id="pin3" style="width:48px;height:56px;line-height:56px;text-align:center;font-size:22px;font-family:'Press Start 2P',monospace;background:rgba(255,255,255,.06);border:2px solid rgba(0,245,255,.4);color:#fff;border-radius:6px;"></div>
@@ -2182,17 +2182,22 @@ function showAccountPopup(mode){
   popup.style.opacity='1';
   popup.style.pointerEvents='all';
 
-  // Auto-focus : sur pinHidden pour déclencher le clavier (y compris Android)
+  // Auto-focus : sur pinHidden pour déclencher le clavier (y compris Android/iOS)
   if(mode==='new_pin'||mode==='recover'||mode==='login_pin'||mode==='migrate_pin'){
     // Petit délai pour laisser le DOM s'afficher avant le focus
     setTimeout(()=>{ 
       const h=document.getElementById('pinHidden');
+      h.removeAttribute('disabled');
+      h.style.pointerEvents='auto';
       h.focus();
-      // Trick Android : on simule un clic pour forcer le clavier
       try{ h.click(); } catch(e){}
-    }, 150);
+    }, 200);
   } else {
-    setTimeout(()=>document.getElementById('accountPseudoInput').focus(), 150);
+    setTimeout(()=>{
+      const inp=document.getElementById('accountPseudoInput');
+      inp.removeAttribute('readonly');
+      inp.focus();
+    }, 200);
   }
 }
 
