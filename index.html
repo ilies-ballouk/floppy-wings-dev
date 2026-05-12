@@ -31,7 +31,7 @@ if('serviceWorker' in navigator){
   });
 }
 </script>
-<!-- PayPal supprimé v21 -->
+<script src="https://www.paypal.com/sdk/js?client-id=AUnN91sryTHcqYsWqtykkRix3Jc7gzYUjceVeFS7vJbWwe5OmsImQm0e3hkucGs6AF3EUztGtDo8meP9&currency=EUR&disable-funding=credit,card" data-sdk-integration-source="button-factory"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
@@ -209,7 +209,6 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 
 @keyframes blink{0%,100%{opacity:.85;}50%{opacity:0;}}
 @keyframes pulse{0%,100%{opacity:.9;}50%{opacity:1;}}
-@keyframes popIn{0%{opacity:0;transform:translateX(-50%) scale(.85);}100%{opacity:1;transform:translateX(-50%) scale(1);}}
 
 /* LEADERBOARD */
 #lbOverlay{
@@ -287,7 +286,7 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   <div id="menuStats"></div>
   <div class="btn-row">
     <button class="btn yw" id="btnPlay">▶ JOUER</button>
-    <button class="btn pk"  id="btnShop">🛒 SKINS</button>
+    <button class="btn pk"  id="btnShop">🛒 SHOP</button>
   </div>
   <div class="btn-row">
     <button class="btn gn" id="btnUpg">⚡ UPGRADES</button>
@@ -295,6 +294,7 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   </div>
   <div class="btn-row">
     <button class="btn pu" id="btnLb">🏅 CLASSEMENT</button>
+    <button class="btn" id="btnPaypal" style="color:#ffc439;border-color:#ffc439;">💎 BOUTIQUE</button>
   </div>
 </div>
 
@@ -352,27 +352,70 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 </div>
 
 
-<!-- SECOND CHANCE POPUP (avec compte à rebours 5s) -->
+<!-- BOUTIQUE PAYPAL -->
+<div class="overlay" id="paypalOverlay">
+  <div class="overlay-title">💎 BOUTIQUE</div>
+  <div style="font-size:clamp(8px,2.2vw,11px);color:rgba(255,255,255,.5);margin-bottom:14px;text-align:center;line-height:2;">
+    Achats sécurisés via PayPal
+  </div>
+
+  <div id="paypalProducts" style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:380px;">
+
+    <!-- Produit 1 : 1000 pièces -->
+    <div class="pp-card">
+      <div class="pp-info">
+        <div class="pp-name">🪙 1 000 PIÈCES</div>
+        <div class="pp-desc">Boost tes upgrades et skins !</div>
+        <div class="pp-price">5,00 €</div>
+      </div>
+      <div id="paypal-btn-1000" class="pp-btn-wrap"></div>
+    </div>
+
+    <!-- Produit 2 : 2000 pièces -->
+    <div class="pp-card">
+      <div class="pp-info">
+        <div class="pp-name">🪙🪙 2 000 PIÈCES</div>
+        <div class="pp-desc">Meilleure valeur ! +600 BONUS</div>
+        <div class="pp-price">8,00 €</div>
+      </div>
+      <div id="paypal-btn-2000" class="pp-btn-wrap"></div>
+    </div>
+
+    <!-- Produit 3 : secondes chances -->
+    <div class="pp-card">
+      <div class="pp-info">
+        <div class="pp-name">❤️ 10 SECONDES CHANCES</div>
+        <div class="pp-desc">Continue ta partie quand tu meurs !</div>
+        <div class="pp-price">5,00 €</div>
+      </div>
+      <div id="paypal-btn-sc" class="pp-btn-wrap"></div>
+    </div>
+
+  </div>
+
+  <div style="font-size:clamp(6px,1.6vw,8px);color:rgba(255,255,255,.25);text-align:center;margin-top:16px;line-height:2;">
+    Pièces ajoutées instantanément.<br>
+    Paiement 100% sécurisé PayPal.
+  </div>
+
+  <div id="ppMsg" style="font-size:clamp(8px,2.2vw,11px);color:var(--gn);min-height:18px;text-align:center;margin-top:8px;"></div>
+
+  <div class="btn-row" style="margin-top:16px;">
+    <button class="btn" id="btnClosePP">← RETOUR</button>
+  </div>
+</div>
+
+<!-- SECOND CHANCE POPUP -->
 <div id="scPopup" style="
-  position:fixed;inset:0;background:rgba(0,0,0,.88);
+  position:fixed;inset:0;background:rgba(0,0,0,.9);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:14px;z-index:100;opacity:0;pointer-events:none;transition:opacity .35s;
+  gap:16px;z-index:100;opacity:0;pointer-events:none;transition:opacity .4s;
 ">
-  <div style="font-size:clamp(28px,8vw,46px);">❤️</div>
+  <div style="font-size:clamp(30px,9vw,50px);">❤️</div>
   <div style="font-size:clamp(12px,3.5vw,18px);color:var(--pk);text-align:center;line-height:1.8;">CONTINUE ?</div>
   <div id="scCount" style="font-size:clamp(9px,2.5vw,13px);color:var(--yw);"></div>
-  <!-- Cercle compte à rebours SVG -->
-  <div style="position:relative;width:72px;height:72px;">
-    <svg viewBox="0 0 72 72" style="position:absolute;inset:0;transform:rotate(-90deg);">
-      <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="5"/>
-      <circle id="scRing" cx="36" cy="36" r="30" fill="none" stroke="var(--pk)" stroke-width="5"
-        stroke-dasharray="188.5" stroke-dashoffset="0" style="transition:stroke-dashoffset .1s linear;"/>
-    </svg>
-    <div id="scNum" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-      font-family:'Press Start 2P',monospace;font-size:clamp(16px,4.5vw,22px);color:#fff;">5</div>
-  </div>
-  <div style="font-size:clamp(7px,1.9vw,10px);color:rgba(255,255,255,.45);text-align:center;max-width:260px;line-height:2;">
-    Tu réapparaîtras au centre de l'écran !
+  <div style="font-size:clamp(7px,2vw,10px);color:rgba(255,255,255,.5);text-align:center;max-width:280px;line-height:2;">
+    Utilise une seconde chance pour reprendre là où tu t'es arrêté !
   </div>
   <div class="btn-row">
     <button class="btn yw" id="btnUseSC">❤️ CONTINUER</button>
@@ -417,22 +460,7 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 <div id="diffBadge"></div>
 <div id="ninjaBadge">🥷 NINJA : SCORE 93</div>
 
-<!-- PANNEAU DEBUG — s'ouvre en tapant 5x sur le logo du menu -->
-<div id="dbgPanel" style="
-  display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;
-  flex-direction:column;font-family:'Press Start 2P',monospace;font-size:9px;
-  color:#0f0;padding:16px;overflow-y:auto;
-">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <span style="color:var(--cy);font-size:10px;">🔧 DEBUG SUPABASE</span>
-    <button id="dbgClose" style="background:none;border:1px solid #f00;color:#f00;font-family:inherit;font-size:9px;padding:4px 8px;cursor:pointer;">✕ FERMER</button>
-  </div>
-  <div id="dbgDeviceId" style="color:#ff0;margin-bottom:8px;word-break:break-all;line-height:2;"></div>
-  <div id="dbgPseudo" style="color:#ff0;margin-bottom:12px;"></div>
-  <button id="dbgSync" style="background:rgba(0,245,255,.1);border:1px solid var(--cy);color:var(--cy);font-family:inherit;font-size:9px;padding:8px 12px;cursor:pointer;margin-bottom:12px;width:100%;">▶ RELANCER SYNCHRO</button>
-  <div style="color:#888;margin-bottom:6px;">── LOGS ──</div>
-  <div id="dbgLogs" style="color:#0f0;line-height:2.2;word-break:break-all;"></div>
-</div>
+<script>
 /* ═══════════════════════════════════════════════
    FLOPPY WINGS v9 — Zombie / Pirate / Taureau
    – Classement en ligne Supabase
@@ -446,51 +474,6 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 const SB_URL='https://oiyqmvaiwcujiutnwiof.supabase.co';
 const SB_KEY='sb_publishable_ld3GijsyIgoZAfZkz6IwpA_SgF24STA';
 const sb=supabase.createClient(SB_URL,SB_KEY);
-
-/* ════ SYSTÈME DEBUG IN-APP (5 taps sur le logo menu) ════ */
-const DBG={
-  logs:[],
-  log(msg,color='#0f0'){
-    const t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    this.logs.push({t,msg,color});
-    if(this.logs.length>60)this.logs.shift();
-    this._render();
-    console.log('[FW]',msg);
-  },
-  err(msg){this.log('❌ '+msg,'#f44');console.error('[FW]',msg);},
-  ok(msg){this.log('✓ '+msg,'#4f4');},
-  _render(){
-    const el=document.getElementById('dbgLogs');
-    if(!el)return;
-    el.innerHTML=this.logs.slice().reverse().map(l=>
-      `<div style="color:${l.color}">[${l.t}] ${l.msg}</div>`
-    ).join('');
-  },
-  open(){
-    const p=document.getElementById('dbgPanel');
-    if(!p)return;
-    document.getElementById('dbgDeviceId').textContent='📱 device_id: '+getDeviceId();
-    document.getElementById('dbgPseudo').textContent='👤 pseudo: '+(localStorage.getItem('fwPseudo')||'(aucun)');
-    this._render();
-    p.style.display='flex';
-  }
-};
-// 5 taps rapides sur le logo menu
-let _dbgTaps=0,_dbgT=0;
-document.addEventListener('touchstart',e=>{
-  if(!e.target.closest('#menuLogo'))return;
-  const now=Date.now();
-  if(now-_dbgT>800)_dbgTaps=0;
-  _dbgT=now;_dbgTaps++;
-  if(_dbgTaps>=5){_dbgTaps=0;DBG.open();}
-},{passive:true});
-document.getElementById('dbgClose').addEventListener('click',()=>{
-  document.getElementById('dbgPanel').style.display='none';
-});
-document.getElementById('dbgSync').addEventListener('click',()=>{
-  DBG.log('Relance syncPlayer + checkGifts...');
-  syncPlayer().then(()=>checkGifts());
-});
 
 const SKIN_EMOJI={classic:'🐦',cyan:'💎',pink:'🌸',ice:'❄️',fire:'🔥',galaxy:'🌌',gold:'✨',ninja:'🥷'};
 let _pendingScore=null;
@@ -1334,7 +1317,6 @@ class Game{
     this.wi=0;this.wt=1;this.wTransing=false;this.wLabelA=0;this.wLabelT=0;
     this._bgG=null;this._bgGK='';
     this.state='playing';
-    this._scUsedThisGame=false; // ← SC : 1 seule par partie
     SV.games++;saveSave();
     showScreen(null);
     document.getElementById('hud').classList.add('playing');
@@ -1344,20 +1326,17 @@ class Game{
 
 
   revive(){
-    // Repositionner au centre de l'écran
-    this.bird.x=this.W*0.35;
-    this.bird.y=this.H*0.5;
+    // Ressusciter l'oiseau à sa position actuelle
     this.bird.alive=true;
     this.bird.stunned=false;
-    this.bird.vy=-this.baseGrav*6;
+    this.bird.vy=-this.baseGrav*8; // petit boost vers le haut
     this.bird.dt=0;
     this.bird.angle=0;
     this.state='playing';
     document.getElementById('hud').classList.add('playing');
     SFX.buy(); vib(30);
-    // Effacer tous les tuyaux pour laisser de l'espace
-    this.pipes=[];
-    this.nextPX=this.W+this.pw;
+    // Effacer les tuyaux proches pour laisser de l'espace
+    this.pipes=this.pipes.filter(p=>p.x>this.W*.3);
     this.parts=[];
     this.flash=0;
   }
@@ -1541,14 +1520,17 @@ function showScreen(id){
 }
 function showDeadScreen(score,coins){
   _pendingScore=score;
-  // SC : disponible seulement si non utilisée cette partie
-  const hasSC=(SV.secondChances||0)>0 && !game._scUsedThisGame;
+  // Vérifier si on propose une seconde chance
+  const hasSC=(SV.secondChances||0)>0;
   if(hasSC){
+    // Proposer la seconde chance avant le game over
     offerSecondChance(
+      // onContinue : le joueur accepte
       function(){
-        game._scUsedThisGame=true; // marquer SC utilisée
+        // Relancer la partie depuis la position actuelle
         game.revive();
       },
+      // onRefuse : afficher l'écran de mort normal
       function(){
         _showDeadScreenFinal(score,coins);
       }
@@ -1581,7 +1563,7 @@ function showMenu(){
   showScreen('menuScreen');
 }
 function anyOverlayOpen(){
-  return['shopOverlay','upgOverlay','statsOverlay','lbOverlay'].some(id=>document.getElementById(id).classList.contains('open'))
+  return['shopOverlay','upgOverlay','statsOverlay','lbOverlay','paypalOverlay'].some(id=>document.getElementById(id).classList.contains('open'))
     ||document.getElementById('ninjaUnlock').classList.contains('show')
     ||(document.getElementById('scPopup').style.pointerEvents==='all');
 }
@@ -1696,9 +1678,22 @@ function renderShop(){
         if(owned||sk.ninja){SV.equipped=sk.id;if(!SV.owned.includes(sk.id))SV.owned.push(sk.id);saveSave();SFX.equip();renderShop();}
         else if(SV.coins>=sk.price){SV.coins-=sk.price;SV.owned.push(sk.id);SV.equipped=sk.id;saveSave();SFX.buy();vib(25);renderShop();}
         else{
-          // Pas assez de pièces
-          btn.textContent='❌ PAS ASSEZ 🪙';
-          setTimeout(()=>renderShop(),1400);
+          // Pas assez de pièces → rediriger vers la boutique PayPal
+          document.getElementById('shopOverlay').classList.remove('open');
+          document.getElementById('paypalOverlay').classList.add('open');
+          if(!window._ppInitialized){
+            window._ppInitialized=true;
+            const tryInit=()=>{
+              if(typeof paypal!=='undefined') initPayPalButtons();
+              else setTimeout(tryInit,500);
+            };
+            tryInit();
+          }
+          // Afficher un message contextuel
+          setTimeout(()=>{
+            const msg=document.getElementById('ppMsg');
+            if(msg){msg.textContent='💡 Achète des pièces pour débloquer ce skin !';msg.style.color='var(--cy)';}
+          },300);
         }
       });
       card.append(pv,nm,pr,btn);
@@ -1770,6 +1765,23 @@ document.getElementById('btnCloseStats').addEventListener('click',e=>{e.stopProp
 
 document.getElementById('btnLb').addEventListener('click',e=>{e.stopPropagation();openLeaderboard(null);});
 
+document.getElementById('btnPaypal').addEventListener('click',e=>{
+  e.stopPropagation();
+  document.getElementById('paypalOverlay').classList.add('open');
+  // Init les boutons PayPal au premier clic (chargement lazy)
+  if(!window._ppInitialized){
+    window._ppInitialized=true;
+    // Attendre que le SDK PayPal soit prêt
+    const tryInit = () => {
+      if(typeof paypal !== 'undefined'){
+        initPayPalButtons();
+      } else {
+        setTimeout(tryInit, 500);
+      }
+    };
+    tryInit();
+  }
+});
 
 document.getElementById('btnDeadLb').addEventListener('click',e=>{e.stopPropagation();openLeaderboard(_pendingScore);});
 document.getElementById('btnCloseLb').addEventListener('click',e=>{e.stopPropagation();document.getElementById('lbOverlay').classList.remove('open');showMenu();});
@@ -1834,211 +1846,122 @@ if(SV.ninjaUnlocked&&!SV.owned.includes('ninja')){SV.owned.push('ninja');saveSav
 
 
 /* ════════════════════════════════════════
-   SECOND CHANCE SYSTEM (1 par partie, countdown 5s, centre écran)
+   PAYPAL INTEGRATION
 ════════════════════════════════════════ */
 
-let _scCallback=null;
-let _scTimer=null;
-
-function offerSecondChance(onContinue,onRefuse){
-  const sc=SV.secondChances||0;
-  if(sc<=0){onRefuse();return;}
-
-  _scCallback={onContinue,onRefuse};
-  document.getElementById('scCount').textContent=sc+' seconde(s) chance(s)';
-  const popup=document.getElementById('scPopup');
-  popup.style.opacity='1';
-  popup.style.pointerEvents='all';
-
-  // Compte à rebours 5s
-  const TOTAL=5, CIRC=188.5;
-  const ring=document.getElementById('scRing');
-  const num=document.getElementById('scNum');
-  let left=TOTAL;
-  ring.style.strokeDashoffset='0';
-  num.textContent=TOTAL;
-
-  clearInterval(_scTimer);
-  _scTimer=setInterval(()=>{
-    left-=0.1;
-    const frac=Math.max(0,left/TOTAL);
-    ring.style.strokeDashoffset=(CIRC*(1-frac)).toFixed(2);
-    num.textContent=Math.ceil(left);
-    if(left<=0){
-      clearInterval(_scTimer);_scTimer=null;
-      _scAutoRefuse();
-    }
-  },100);
+function showPpMsg(msg, isErr=false){
+  const el = document.getElementById('ppMsg');
+  el.textContent = msg;
+  el.style.color = isErr ? 'var(--pk)' : 'var(--gn)';
+  setTimeout(() => { if(el.textContent===msg) el.textContent=''; }, 4000);
 }
 
-function _scAutoRefuse(){
-  closeScPopup();
-  if(_scCallback){_scCallback.onRefuse();_scCallback=null;}
+function createPayPalButton(containerId, amount, label, onSuccess){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  // Vérifier si PayPal SDK est chargé
+  if(typeof paypal === 'undefined'){
+    container.innerHTML = '<div style="font-size:7px;color:#888;padding:8px;">PayPal indisponible</div>';
+    return;
+  }
+  paypal.Buttons({
+    style:{layout:'vertical',color:'blue',shape:'pill',label:'pay',height:35},
+    createOrder: function(data, actions){
+      return actions.order.create({
+        purchase_units:[{
+          description: label,
+          amount:{value: amount, currency_code:'EUR'}
+        }]
+      });
+    },
+    onApprove: function(data, actions){
+      return actions.order.capture().then(function(details){
+        onSuccess(details);
+      });
+    },
+    onError: function(err){
+      showPpMsg('❌ Erreur de paiement', true);
+      console.error('PayPal error:', err);
+    }
+  }).render('#'+containerId);
+}
+
+function initPayPalButtons(){
+  // Bouton 1000 pièces – 5€
+  createPayPalButton('paypal-btn-1000', '5.00', '1000 pièces Floppy Wings', function(details){
+    SV.coins += 1000;
+    saveSave();
+    document.getElementById('menuCoins').textContent='🪙 '+SV.coins+' PIÈCES';
+    document.getElementById('shopCoinsVal').textContent=SV.coins;
+    showPpMsg('✓ +1000 pièces ajoutées !');
+    SFX.buy(); vib(40);
+  });
+
+  // Bouton 2000 pièces – 8€
+  createPayPalButton('paypal-btn-2000', '8.00', '2000 pièces Floppy Wings', function(details){
+    SV.coins += 2000;
+    saveSave();
+    document.getElementById('menuCoins').textContent='🪙 '+SV.coins+' PIÈCES';
+    document.getElementById('shopCoinsVal').textContent=SV.coins;
+    showPpMsg('✓ +2000 pièces ajoutées !');
+    SFX.buy(); vib(40);
+  });
+
+  // Bouton 10 secondes chances – 5€
+  createPayPalButton('paypal-btn-sc', '5.00', '10 secondes chances Floppy Wings', function(details){
+    SV.secondChances = (SV.secondChances||0) + 10;
+    saveSave();
+    showPpMsg('✓ +10 secondes chances !');
+    SFX.buy(); vib(40);
+  });
+}
+
+// Ouvrir/fermer la boutique PayPal
+document.getElementById('btnClosePP').addEventListener('click', e=>{
+  e.stopPropagation();
+  document.getElementById('paypalOverlay').classList.remove('open');
+  showMenu();
+});
+
+/* ════════════════════════════════════════
+   SECOND CHANCE SYSTEM
+════════════════════════════════════════ */
+
+let _scCallback = null; // callback appelé si le joueur utilise une SC
+
+function offerSecondChance(onContinue, onRefuse){
+  const sc = SV.secondChances || 0;
+  if(sc <= 0){ onRefuse(); return; }
+
+  _scCallback = {onContinue, onRefuse};
+  const popup = document.getElementById('scPopup');
+  document.getElementById('scCount').textContent = sc + ' seconde(s) chance(s) disponible(s)';
+  popup.style.opacity='1';
+  popup.style.pointerEvents='all';
 }
 
 function closeScPopup(){
-  clearInterval(_scTimer);_scTimer=null;
-  const popup=document.getElementById('scPopup');
+  const popup = document.getElementById('scPopup');
   popup.style.opacity='0';
   popup.style.pointerEvents='none';
 }
 
-document.getElementById('btnUseSC').addEventListener('click',e=>{
+document.getElementById('btnUseSC').addEventListener('click', e=>{
   e.stopPropagation();
-  SV.secondChances=Math.max(0,(SV.secondChances||0)-1);
-  SV.freeSCUsed=true;
+  SV.secondChances = Math.max(0,(SV.secondChances||0)-1);
+  SV.freeSCUsed = true;
   saveSave();
   closeScPopup();
-  if(_scCallback){_scCallback.onContinue();_scCallback=null;}
+  if(_scCallback) _scCallback.onContinue();
+  _scCallback = null;
 });
 
-document.getElementById('btnRefuseSC').addEventListener('click',e=>{
+document.getElementById('btnRefuseSC').addEventListener('click', e=>{
   e.stopPropagation();
   closeScPopup();
-  if(_scCallback){_scCallback.onRefuse();_scCallback=null;}
+  if(_scCallback) _scCallback.onRefuse();
+  _scCallback = null;
 });
-
-/* ════════════════════════════════════════
-   ADMIN GIFTS — table fw_gifts + fw_players
-   Structure fw_players : id, pseudo, device_id, last_seen
-   Structure fw_gifts   : id, device_id, coins_delta, sc_delta,
-                          skin_lock (texte skin id), skin_unlock (texte skin id),
-                          message, applied (bool), created_at
-════════════════════════════════════════ */
-
-function getDeviceId(){
-  let id=localStorage.getItem('fwDeviceId');
-  if(!id){id='fw_'+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('fwDeviceId',id);}
-  return id;
-}
-
-/* Enregistre / met à jour le joueur en base (très minimal pour fiabilité) */
-async function syncPlayer(){
-  const did=getDeviceId();
-  const pseudo=(localStorage.getItem('fwPseudo')||'').toUpperCase()||null;
-  DBG.log('syncPlayer → '+did.slice(0,20)+'... pseudo='+(pseudo||'null'));
-  try{
-    // 1) Chercher si la ligne existe
-    const{data:existing,error:selErr}=await sb
-      .from('fw_players')
-      .select('id')
-      .eq('device_id',did)
-      .maybeSingle();
-
-    if(selErr){
-      DBG.err('SELECT fw_players: '+selErr.message+' (code:'+selErr.code+')');
-      DBG.err('→ Va dans Supabase SQL Editor et exécute :');
-      DBG.err('ALTER TABLE fw_players DISABLE ROW LEVEL SECURITY;');
-      return;
-    }
-
-    if(existing){
-      const{error:upErr}=await sb.from('fw_players')
-        .update({pseudo:pseudo, last_seen:new Date().toISOString()})
-        .eq('device_id',did);
-      if(upErr) DBG.err('UPDATE fw_players: '+upErr.message);
-      else DBG.ok('Joueur mis à jour (id='+existing.id+')');
-    } else {
-      const{data:ins,error:insErr}=await sb.from('fw_players')
-        .insert({device_id:did, pseudo:pseudo, last_seen:new Date().toISOString()})
-        .select('id')
-        .single();
-      if(insErr) DBG.err('INSERT fw_players: '+insErr.message+' (code:'+insErr.code+')');
-      else DBG.ok('Nouveau joueur créé ! id='+ins.id);
-    }
-  }catch(e){
-    DBG.err('syncPlayer EXCEPTION: '+e.message);
-  }
-}
-
-/* Vérifie les cadeaux admin en attente et les applique */
-async function checkGifts(){
-  const did=getDeviceId();
-  DBG.log('checkGifts → '+did.slice(0,20)+'...');
-  try{
-    const{data,error}=await sb.from('fw_gifts')
-      .select('*')
-      .eq('device_id',did)
-      .eq('applied',false)
-      .order('created_at',{ascending:true});
-
-    if(error){DBG.err('SELECT fw_gifts: '+error.message);return;}
-    if(!data||data.length===0){DBG.log('Aucun cadeau en attente');return;}
-
-    DBG.ok(data.length+' cadeau(x) trouvé(s) !');
-    for(const gift of data){
-      let changed=false;
-      const lines=[];
-
-      // Pièces (+/-)
-      if(gift.coins_delta && gift.coins_delta!==0){
-        SV.coins=Math.max(0,(SV.coins||0)+gift.coins_delta);
-        changed=true;
-        if(gift.coins_delta>0) lines.push('🪙 +'+gift.coins_delta+' pièces');
-        else lines.push('🪙 '+gift.coins_delta+' pièces');
-      }
-      // Secondes chances (+/-)
-      if(gift.sc_delta && gift.sc_delta!==0){
-        SV.secondChances=Math.max(0,(SV.secondChances||0)+gift.sc_delta);
-        changed=true;
-        if(gift.sc_delta>0) lines.push('❤️ +'+gift.sc_delta+' seconde(s) chance(s)');
-        else lines.push('❤️ '+gift.sc_delta+' seconde(s) chance(s)');
-      }
-      // Débloquer un skin
-      if(gift.skin_unlock){
-        const sid=gift.skin_unlock.trim();
-        if(sid&&!SV.owned.includes(sid)){SV.owned.push(sid);changed=true;}
-        lines.push('🎨 Skin "'+sid+'" débloqué !');
-      }
-      // Verrouiller un skin (retirer de la liste owned)
-      if(gift.skin_lock){
-        const sid=gift.skin_lock.trim();
-        if(sid&&SV.owned.includes(sid)){
-          SV.owned=SV.owned.filter(x=>x!==sid);
-          if(SV.equipped===sid)SV.equipped='classic';
-          changed=true;
-          lines.push('🔒 Skin "'+sid+'" retiré');
-        }
-      }
-
-      if(changed) saveSave();
-
-      // Message perso de l'admin (ou généré)
-      const msg=gift.message||lines.join(' · ')||'Le Boss vous a envoyé un cadeau !';
-      showAdminNotif(msg);
-
-      // Marquer comme appliqué
-      await sb.from('fw_gifts').update({applied:true}).eq('id',gift.id);
-    }
-
-    // Rafraîchir l'affichage
-    showMenu();
-  }catch(e){DBG.err('checkGifts EXCEPTION: '+e.message);}
-}
-
-/* Notification admin style banner */
-function showAdminNotif(msg){
-  const el=document.createElement('div');
-  el.style.cssText=[
-    'position:fixed;top:18px;left:50%;transform:translateX(-50%)',
-    'background:rgba(0,20,60,.96);border:2px solid var(--cy)',
-    'color:var(--cy);font-family:\'Press Start 2P\',monospace',
-    'font-size:clamp(7px,2.2vw,11px);padding:12px 20px',
-    'border-radius:8px;z-index:9999;text-align:center',
-    'line-height:1.9;max-width:90vw;box-shadow:0 0 18px var(--cy)',
-    'animation:popIn .4s ease'
-  ].join(';');
-  el.textContent='👑 '+msg;
-  document.body.appendChild(el);
-  setTimeout(()=>{
-    el.style.transition='opacity .6s';
-    el.style.opacity='0';
-    setTimeout(()=>el.remove(),700);
-  },5000);
-}
-
-/* Lancer au boot */
-setTimeout(()=>{syncPlayer();checkGifts();},1500);
 
 showMenu();
 document.getElementById('hud').classList.remove('playing');
