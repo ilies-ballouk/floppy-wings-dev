@@ -1271,6 +1271,7 @@ class Game{
     this.wi=0;this.wt=1;this.wTransing=false;this.wLabelA=0;this.wLabelT=0;
     this._bgG=null;this._bgGK='';
     this.state='playing';
+    this._scUsedThisGame=false; // reset SC par partie
     SV.games++;saveSave();
     showScreen(null);
     document.getElementById('hud').classList.add('playing');
@@ -1477,17 +1478,14 @@ function showScreen(id){
 }
 function showDeadScreen(score,coins){
   _pendingScore=score;
-  // Vérifier si on propose une seconde chance
-  const hasSC=(SV.secondChances||0)>0;
+  // Vérifier si on propose une seconde chance (max 1 par partie)
+  const hasSC=(SV.secondChances||0)>0 && !game._scUsedThisGame;
   if(hasSC){
-    // Proposer la seconde chance avant le game over
     offerSecondChance(
-      // onContinue : le joueur accepte
       function(){
-        // Relancer la partie depuis la position actuelle
+        game._scUsedThisGame=true; // marquer : SC utilisée cette partie
         game.revive();
       },
-      // onRefuse : afficher l'écran de mort normal
       function(){
         _showDeadScreenFinal(score,coins);
       }
@@ -1792,9 +1790,8 @@ async function trackGameStats(score, coins, skin){
   const did=getDeviceId();
   const pseudo=(localStorage.getItem('fwPseudo')||'').toUpperCase()||null;
   try{
-    // Upsert sur device_id : màj best score, total parties, total tuyaux, last_seen
     const best=Math.max(score, SV.best||0);
-    await sb.from('purchases').upsert({
+    const payload={
       device_id: did,
       pseudo: pseudo,
       best: best,
@@ -1804,9 +1801,20 @@ async function trackGameStats(score, coins, skin){
       sc: SV.secondChances||0,
       skin_equipped: skin||'classic',
       last_seen: new Date().toISOString()
-    },{onConflict:'device_id'});
+    };
+    const{error}=await sb.from('purchases').upsert(payload,{onConflict:'device_id'});
+    if(error){
+      console.error('trackGameStats upsert error:', error);
+      // Fallback : tenter un insert minimal (colonnes de base seulement)
+      const{error:e2}=await sb.from('purchases').upsert({
+        device_id: did,
+        pseudo: pseudo,
+        last_seen: new Date().toISOString()
+      },{onConflict:'device_id'});
+      if(e2) console.error('trackGameStats fallback error:', e2);
+    }
   }catch(e){
-    console.warn('trackGameStats:', e);
+    console.error('trackGameStats exception:', e);
   }
 }
 
@@ -1848,6 +1856,9 @@ function showGiftNotif(msg){
 
 /* Lancer vérification des cadeaux au démarrage */
 setTimeout(checkGifts, 1500);
+
+/* Créer/màj l'entrée en base dès le chargement */
+setTimeout(()=>trackGameStats(0, 0, SV.equipped||'classic'), 2000);
 
 /* ════════════════════════════════════════
    SECOND CHANCE SYSTEM
