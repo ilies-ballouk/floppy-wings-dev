@@ -417,7 +417,22 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 <div id="diffBadge"></div>
 <div id="ninjaBadge">🥷 NINJA : SCORE 93</div>
 
-<script>
+<!-- PANNEAU DEBUG — s'ouvre en tapant 5x sur le logo du menu -->
+<div id="dbgPanel" style="
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;
+  flex-direction:column;font-family:'Press Start 2P',monospace;font-size:9px;
+  color:#0f0;padding:16px;overflow-y:auto;
+">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <span style="color:var(--cy);font-size:10px;">🔧 DEBUG SUPABASE</span>
+    <button id="dbgClose" style="background:none;border:1px solid #f00;color:#f00;font-family:inherit;font-size:9px;padding:4px 8px;cursor:pointer;">✕ FERMER</button>
+  </div>
+  <div id="dbgDeviceId" style="color:#ff0;margin-bottom:8px;word-break:break-all;line-height:2;"></div>
+  <div id="dbgPseudo" style="color:#ff0;margin-bottom:12px;"></div>
+  <button id="dbgSync" style="background:rgba(0,245,255,.1);border:1px solid var(--cy);color:var(--cy);font-family:inherit;font-size:9px;padding:8px 12px;cursor:pointer;margin-bottom:12px;width:100%;">▶ RELANCER SYNCHRO</button>
+  <div style="color:#888;margin-bottom:6px;">── LOGS ──</div>
+  <div id="dbgLogs" style="color:#0f0;line-height:2.2;word-break:break-all;"></div>
+</div>
 /* ═══════════════════════════════════════════════
    FLOPPY WINGS v9 — Zombie / Pirate / Taureau
    – Classement en ligne Supabase
@@ -431,6 +446,51 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
 const SB_URL='https://oiyqmvaiwcujiutnwiof.supabase.co';
 const SB_KEY='sb_publishable_ld3GijsyIgoZAfZkz6IwpA_SgF24STA';
 const sb=supabase.createClient(SB_URL,SB_KEY);
+
+/* ════ SYSTÈME DEBUG IN-APP (5 taps sur le logo menu) ════ */
+const DBG={
+  logs:[],
+  log(msg,color='#0f0'){
+    const t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    this.logs.push({t,msg,color});
+    if(this.logs.length>60)this.logs.shift();
+    this._render();
+    console.log('[FW]',msg);
+  },
+  err(msg){this.log('❌ '+msg,'#f44');console.error('[FW]',msg);},
+  ok(msg){this.log('✓ '+msg,'#4f4');},
+  _render(){
+    const el=document.getElementById('dbgLogs');
+    if(!el)return;
+    el.innerHTML=this.logs.slice().reverse().map(l=>
+      `<div style="color:${l.color}">[${l.t}] ${l.msg}</div>`
+    ).join('');
+  },
+  open(){
+    const p=document.getElementById('dbgPanel');
+    if(!p)return;
+    document.getElementById('dbgDeviceId').textContent='📱 device_id: '+getDeviceId();
+    document.getElementById('dbgPseudo').textContent='👤 pseudo: '+(localStorage.getItem('fwPseudo')||'(aucun)');
+    this._render();
+    p.style.display='flex';
+  }
+};
+// 5 taps rapides sur le logo menu
+let _dbgTaps=0,_dbgT=0;
+document.addEventListener('touchstart',e=>{
+  if(!e.target.closest('#menuLogo'))return;
+  const now=Date.now();
+  if(now-_dbgT>800)_dbgTaps=0;
+  _dbgT=now;_dbgTaps++;
+  if(_dbgTaps>=5){_dbgTaps=0;DBG.open();}
+},{passive:true});
+document.getElementById('dbgClose').addEventListener('click',()=>{
+  document.getElementById('dbgPanel').style.display='none';
+});
+document.getElementById('dbgSync').addEventListener('click',()=>{
+  DBG.log('Relance syncPlayer + checkGifts...');
+  syncPlayer().then(()=>checkGifts());
+});
 
 const SKIN_EMOJI={classic:'🐦',cyan:'💎',pink:'🌸',ice:'❄️',fire:'🔥',galaxy:'🌌',gold:'✨',ninja:'🥷'};
 let _pendingScore=null;
@@ -1856,9 +1916,9 @@ function getDeviceId(){
 async function syncPlayer(){
   const did=getDeviceId();
   const pseudo=(localStorage.getItem('fwPseudo')||'').toUpperCase()||null;
-  console.log('[FW] syncPlayer → device_id=',did,' pseudo=',pseudo);
+  DBG.log('syncPlayer → '+did.slice(0,20)+'... pseudo='+(pseudo||'null'));
   try{
-    // 1) Vérifier si la ligne existe déjà
+    // 1) Chercher si la ligne existe
     const{data:existing,error:selErr}=await sb
       .from('fw_players')
       .select('id')
@@ -1866,35 +1926,35 @@ async function syncPlayer(){
       .maybeSingle();
 
     if(selErr){
-      console.error('[FW] SELECT fw_players ERREUR:',selErr.message,'code:',selErr.code);
-      console.error('[FW] → Vérifie que la table fw_players existe et que le RLS est désactivé (voir SQL ci-dessous)');
+      DBG.err('SELECT fw_players: '+selErr.message+' (code:'+selErr.code+')');
+      DBG.err('→ Va dans Supabase SQL Editor et exécute :');
+      DBG.err('ALTER TABLE fw_players DISABLE ROW LEVEL SECURITY;');
       return;
     }
 
     if(existing){
-      // Mettre à jour last_seen + pseudo
       const{error:upErr}=await sb.from('fw_players')
         .update({pseudo:pseudo, last_seen:new Date().toISOString()})
         .eq('device_id',did);
-      if(upErr) console.error('[FW] UPDATE fw_players ERREUR:',upErr.message);
-      else console.log('[FW] ✓ Joueur mis à jour (id='+existing.id+')');
+      if(upErr) DBG.err('UPDATE fw_players: '+upErr.message);
+      else DBG.ok('Joueur mis à jour (id='+existing.id+')');
     } else {
-      // Insérer nouvelle ligne
       const{data:ins,error:insErr}=await sb.from('fw_players')
         .insert({device_id:did, pseudo:pseudo, last_seen:new Date().toISOString()})
         .select('id')
         .single();
-      if(insErr) console.error('[FW] INSERT fw_players ERREUR:',insErr.message,'code:',insErr.code);
-      else console.log('[FW] ✓ Nouveau joueur créé (id='+ins.id+')');
+      if(insErr) DBG.err('INSERT fw_players: '+insErr.message+' (code:'+insErr.code+')');
+      else DBG.ok('Nouveau joueur créé ! id='+ins.id);
     }
   }catch(e){
-    console.error('[FW] syncPlayer EXCEPTION:',e);
+    DBG.err('syncPlayer EXCEPTION: '+e.message);
   }
 }
 
 /* Vérifie les cadeaux admin en attente et les applique */
 async function checkGifts(){
   const did=getDeviceId();
+  DBG.log('checkGifts → '+did.slice(0,20)+'...');
   try{
     const{data,error}=await sb.from('fw_gifts')
       .select('*')
@@ -1902,9 +1962,10 @@ async function checkGifts(){
       .eq('applied',false)
       .order('created_at',{ascending:true});
 
-    if(error){console.warn('checkGifts:',error.message);return;}
-    if(!data||data.length===0)return;
+    if(error){DBG.err('SELECT fw_gifts: '+error.message);return;}
+    if(!data||data.length===0){DBG.log('Aucun cadeau en attente');return;}
 
+    DBG.ok(data.length+' cadeau(x) trouvé(s) !');
     for(const gift of data){
       let changed=false;
       const lines=[];
@@ -1952,7 +2013,7 @@ async function checkGifts(){
 
     // Rafraîchir l'affichage
     showMenu();
-  }catch(e){console.warn('checkGifts exc:',e);}
+  }catch(e){DBG.err('checkGifts EXCEPTION: '+e.message);}
 }
 
 /* Notification admin style banner */
