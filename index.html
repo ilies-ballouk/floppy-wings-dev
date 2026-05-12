@@ -441,7 +441,10 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
     Ce pseudo t'identifiera dans le classement mondial.
   </div>
 
-  <!-- Champ texte natif iOS — pas d'input hidden, z-index max, position static -->
+  <!-- Input — rendu visible dès le HTML, aucun JS nécessaire pour le focus -->
+  <label for="registerInput" style="
+    font-size:11px;color:rgba(255,255,255,.4);letter-spacing:1px;margin-bottom:-8px;
+  ">APPUIE ICI POUR ÉCRIRE</label>
   <input id="registerInput"
     type="text"
     maxlength="16"
@@ -450,35 +453,24 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
     autocorrect="off"
     autocapitalize="characters"
     spellcheck="false"
-    inputmode="text"
-    enterkeyhint="done"
     style="
       display:block;
-      font-family:'Press Start 2P',monospace;
       font-size:16px;
-      background:#1a1a2e;
-      border:2px solid #00f5ff;
-      color:#fff;
-      padding:16px 12px;
-      border-radius:8px;
+      font-family:'Press Start 2P',monospace;
+      background:#fff;
+      border:3px solid #00f5ff;
+      color:#000;
+      padding:18px 12px;
+      border-radius:10px;
       width:100%;
       max-width:300px;
       text-align:center;
-      outline:none;
       letter-spacing:2px;
       -webkit-appearance:none;
-      -webkit-user-select:auto;
-      user-select:auto;
-      touch-action:manipulation;
-      position:relative;
-      z-index:201;
-      opacity:1;
-      pointer-events:auto;
+      box-sizing:border-box;
     "
   />
-
-  <!-- Indicateur debug état input -->
-  <div id="inputDebugState" style="font-size:10px;color:#666;font-family:monospace;">état: en attente</div>
+  <div id="inputDebugState" style="font-size:10px;color:#888;font-family:monospace;text-align:center;">Appuie sur le champ ci-dessus ↑</div>
 
   <div id="registerStatus" class="lb-status info">2 à 16 caractères — lettres, chiffres, _ ou -</div>
   <button class="btn gn" id="btnRegister" style="touch-action:manipulation;">✓ COMMENCER</button>
@@ -734,46 +726,37 @@ function askPseudoAndRegister(){
   dbg('REGISTER', 'affichage overlay pseudo');
   return new Promise(resolve=>{
     const overlay=document.getElementById('registerOverlay');
+    // Rendre visible AVANT tout — pas de transition qui bloquerait iOS
+    overlay.style.transition='none';
     overlay.style.visibility='visible';
     overlay.style.opacity='1';
     overlay.style.pointerEvents='all';
-    dbg('REGISTER OVERLAY', 'visibility=visible opacity=1');
-    setTimeout(()=>{
-      const inp=document.getElementById('registerInput');
-      const dbgState=document.getElementById('inputDebugState');
-      dbg('INPUT EXISTS', inp ? 'OUI' : 'NON TROUVÉ !!');
-      if(!inp){ return; }
+    dbg('REGISTER OVERLAY', 'visible');
 
-      inp.removeAttribute('readonly');
-      inp.style.border='2px solid #ff0';
-      if(dbgState) dbgState.textContent='état: prêt (jaune=ok)';
+    const inp=document.getElementById('registerInput');
+    const dbgState=document.getElementById('inputDebugState');
 
-      // Listeners de diagnostic
-      inp.addEventListener('focus', ()=>{
-        dbg('INPUT EVENT','focus déclenché ✓');
+    if(inp){
+      // Listeners diagnostic (pas de focus() programmatique — iOS l'ignore hors geste utilisateur)
+      inp.addEventListener('focus',()=>{
+        dbg('INPUT','focus ✓');
         inp.style.border='2px solid #0f0';
-        if(dbgState) dbgState.textContent='état: FOCUS ✓ clavier ouvert?';
+        if(dbgState)dbgState.textContent='FOCUS ✓ — tape ton pseudo';
       });
-      inp.addEventListener('blur', ()=>{
-        dbg('INPUT EVENT','blur — clavier fermé');
-        if(dbgState) dbgState.textContent='état: blur (clavier fermé)';
+      inp.addEventListener('blur',()=>{
+        dbg('INPUT','blur');
+        if(dbgState)dbgState.textContent='blur — reclique pour retaper';
       });
-      inp.addEventListener('input', ()=>{
-        dbg('INPUT EVENT','saisie: "'+inp.value+'"');
-        if(dbgState) dbgState.textContent='saisi: "'+inp.value+'"';
+      inp.addEventListener('input',()=>{
+        if(dbgState)dbgState.textContent='saisi: "'+inp.value+'"';
       });
-      inp.addEventListener('touchstart', ()=>{
-        dbg('INPUT EVENT','touchstart sur input');
-        if(dbgState) dbgState.textContent='état: touchstart détecté';
+      inp.addEventListener('touchend',()=>{
+        dbg('INPUT','touchend — iOS devrait ouvrir clavier');
+        if(dbgState)dbgState.textContent='touchend détecté';
       });
-      inp.addEventListener('click', ()=>{
-        dbg('INPUT EVENT','click sur input');
-        if(dbgState) dbgState.textContent='état: click détecté';
-      });
-
-      try{ inp.focus(); dbg('FOCUS', 'appelé sans erreur'); }
-      catch(fe){ dbg('FOCUS ERR', fe.message); }
-    },500);
+      if(dbgState)dbgState.textContent='Appuie sur le champ ci-dessus ↑';
+      dbg('REGISTER','pas de focus() auto — attente tap utilisateur');
+    }
     document.getElementById('btnRegister').onclick=async()=>{
       dbg('BTN CLICK', 'bouton pressé');
       const inp=document.getElementById('registerInput');
