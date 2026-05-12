@@ -533,21 +533,29 @@ function showGiftPopup(gift){
 
 /* ── Boot : vérifie/crée le joueur ── */
 async function bootPlayerCheck(){
-  // Affiche l'écran de chargement
   document.getElementById('bootScreen').style.display='flex';
+
+  // Timeout de sécurité : si tout plante, on débloque après 5s
+  const safetyTimer=setTimeout(()=>{
+    console.warn('boot timeout — fallback local');
+    hideBoot();
+    if(!SV.pseudo) askPseudoAndRegister();
+  },5000);
+
   try{
     // 1. Cherche dans players
     const{data:player,error:pe}=await sb
       .from('players').select('*').eq('player_id',PLAYER_ID).maybeSingle();
 
+    clearTimeout(safetyTimer);
+
     if(player&&!pe){
-      // Joueur trouvé → charge ses données
+      // Joueur trouvé → fusionne les données (cloud gagne sur le meilleur score)
       SV.pseudo=player.pseudo;
       SV.best=Math.max(SV.best||0,player.best||0);
       SV.coins=Math.max(SV.coins||0,player.coins||0);
       SV.games=Math.max(SV.games||0,player.games||0);
       SV.totalPipes=Math.max(SV.totalPipes||0,player.total_pipes||0);
-      // Merge owned skins
       const cloudOwned=player.owned_skins||['classic'];
       SV.owned=[...new Set([...SV.owned,...cloudOwned])];
       SV.upgrades={...{jump:0,gravity:0,speed:0},...player.upgrades,...SV.upgrades};
@@ -555,47 +563,45 @@ async function bootPlayerCheck(){
       SV.ninjaUnlocked=SV.ninjaUnlocked||player.ninja_unlocked||false;
       SV.streak=player.streak||SV.streak||0;
       SV.dailyLast=SV.dailyLast||player.daily_last||'';
-      saveSave();
-      // Applique les cadeaux en attente
-      await applyPendingGifts(player.gifts||[]);
-      // Met à jour last_seen
-      syncPlayerToCloud();
+      localStorage.setItem('fwv4',JSON.stringify(SV));// save direct sans déclencher sync
+      const gifts=player.gifts||[];
+      hideBoot();
+      await applyPendingGifts(gifts);
+      syncPlayerToCloud();// fire & forget
     } else {
-      // 2. Pas dans players → cherche dans leaderboard (migration)
+      // 2. Pas trouvé → migration leaderboard si pseudo connu
       const savedPseudo=localStorage.getItem('fwPseudo')||'';
       if(savedPseudo){
-        const{data:lbRow}=await sb
-          .from('leaderboard').select('pseudo,score,skin').eq('pseudo',savedPseudo.toUpperCase()).maybeSingle();
-        if(lbRow){
-          // Migration : récupère le score du leaderboard
-          SV.pseudo=lbRow.pseudo;
-          SV.best=Math.max(SV.best||0,lbRow.score||0);
-          if(lbRow.skin&&!SV.owned.includes(lbRow.skin))SV.owned.push(lbRow.skin);
-          saveSave();
-          await syncPlayerToCloud();
-          hideBoot();
-          return;
-        }
+        try{
+          const{data:lbRow}=await sb
+            .from('leaderboard').select('pseudo,score,skin').eq('pseudo',savedPseudo.toUpperCase()).maybeSingle();
+          if(lbRow){
+            SV.pseudo=lbRow.pseudo;
+            SV.best=Math.max(SV.best||0,lbRow.score||0);
+            if(lbRow.skin&&!SV.owned.includes(lbRow.skin))SV.owned.push(lbRow.skin);
+            localStorage.setItem('fwv4',JSON.stringify(SV));
+            hideBoot();
+            syncPlayerToCloud();
+            return;
+          }
+        }catch(migErr){console.warn('migration lb:',migErr);}
       }
-      // 3. Nouveau joueur → demande le pseudo
+      // 3. Nouveau joueur
       hideBoot();
       await askPseudoAndRegister();
-      return;
     }
   }catch(e){
-    console.warn('boot check:',e);
-    // Offline/erreur → on continue avec les données locales
-    if(!SV.pseudo){
-      hideBoot();
-      await askPseudoAndRegister();
-      return;
-    }
+    clearTimeout(safetyTimer);
+    console.warn('boot check error:',e);
+    hideBoot();
+    if(!SV.pseudo) await askPseudoAndRegister();
   }
-  hideBoot();
 }
 
 function hideBoot(){
-  document.getElementById('bootScreen').style.display='none';
+  clearTimeout(arguments.callee._t);// no-op guard
+  const el=document.getElementById('bootScreen');
+  if(el)el.style.display='none';
 }
 
 function askPseudoAndRegister(){
@@ -608,13 +614,14 @@ function askPseudoAndRegister(){
       const st=document.getElementById('registerStatus');
       if(pseudo.length<2){st.textContent='MIN 2 CARACTÈRES';st.className='lb-status err';return;}
       st.textContent='CRÉATION...';st.className='lb-status info';
-      // Vérifie unicité dans players
-      const{data:existing}=await sb.from('players').select('player_id').eq('pseudo',pseudo).maybeSingle();
-      if(existing){st.textContent='PSEUDO DÉJÀ PRIS !';st.className='lb-status err';return;}
+      try{
+        const{data:existing}=await sb.from('players').select('player_id').eq('pseudo',pseudo).maybeSingle();
+        if(existing){st.textContent='PSEUDO DÉJÀ PRIS !';st.className='lb-status err';return;}
+      }catch(e){/* table pas encore créée ou offline → on ignore */}
       SV.pseudo=pseudo;
       localStorage.setItem('fwPseudo',pseudo);
-      saveSave();
-      await syncPlayerToCloud();
+      localStorage.setItem('fwv4',JSON.stringify(SV));
+      syncPlayerToCloud();// fire & forget
       overlay.style.opacity='0';overlay.style.pointerEvents='none';
       resolve();
     };
