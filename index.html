@@ -1856,19 +1856,40 @@ function getDeviceId(){
 async function syncPlayer(){
   const did=getDeviceId();
   const pseudo=(localStorage.getItem('fwPseudo')||'').toUpperCase()||null;
+  console.log('[FW] syncPlayer → device_id=',did,' pseudo=',pseudo);
   try{
-    // Test connexion rapide
-    const {error:testErr}=await sb.from('fw_players').select('id').limit(1);
-    if(testErr){console.warn('fw_players inaccessible:',testErr.message);return;}
+    // 1) Vérifier si la ligne existe déjà
+    const{data:existing,error:selErr}=await sb
+      .from('fw_players')
+      .select('id')
+      .eq('device_id',did)
+      .maybeSingle();
 
-    // Upsert minimal sur device_id
-    const {error}=await sb.from('fw_players').upsert(
-      {device_id:did, pseudo:pseudo, last_seen:new Date().toISOString()},
-      {onConflict:'device_id', ignoreDuplicates:false}
-    );
-    if(error) console.warn('syncPlayer upsert:',error.message);
-    else console.log('✓ Joueur enregistré',did);
-  }catch(e){console.warn('syncPlayer:',e);}
+    if(selErr){
+      console.error('[FW] SELECT fw_players ERREUR:',selErr.message,'code:',selErr.code);
+      console.error('[FW] → Vérifie que la table fw_players existe et que le RLS est désactivé (voir SQL ci-dessous)');
+      return;
+    }
+
+    if(existing){
+      // Mettre à jour last_seen + pseudo
+      const{error:upErr}=await sb.from('fw_players')
+        .update({pseudo:pseudo, last_seen:new Date().toISOString()})
+        .eq('device_id',did);
+      if(upErr) console.error('[FW] UPDATE fw_players ERREUR:',upErr.message);
+      else console.log('[FW] ✓ Joueur mis à jour (id='+existing.id+')');
+    } else {
+      // Insérer nouvelle ligne
+      const{data:ins,error:insErr}=await sb.from('fw_players')
+        .insert({device_id:did, pseudo:pseudo, last_seen:new Date().toISOString()})
+        .select('id')
+        .single();
+      if(insErr) console.error('[FW] INSERT fw_players ERREUR:',insErr.message,'code:',insErr.code);
+      else console.log('[FW] ✓ Nouveau joueur créé (id='+ins.id+')');
+    }
+  }catch(e){
+    console.error('[FW] syncPlayer EXCEPTION:',e);
+  }
 }
 
 /* Vérifie les cadeaux admin en attente et les applique */
