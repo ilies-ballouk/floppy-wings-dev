@@ -731,8 +731,7 @@ async function bootPlayerCheck(){
       const gifts=player.gifts||[];
       // Injecte le cadeau de bienvenue en tête si pas encore réclamé
       if(!welcomeClaimed){
-        gifts.unshift({secondChances:2,message:'🎁 CADEAU DE BIENVENUE !
-PROFITE BIEN !'});
+        gifts.unshift({secondChances:2,message:'🎁 CADEAU DE BIENVENUE ! PROFITE BIEN !'});
       }
       dbg('HIDE BOOT', 'lancement jeu');
       hideBoot();
@@ -761,7 +760,7 @@ PROFITE BIEN !'});
             dbg('MIGRATION OK', 'hideBoot → jeu');
             hideBoot();
             if(!SV.welcomeGiftClaimed){
-              await showGiftPopup({secondChances:2,message:'🎁 CADEAU DE BIENVENUE !\nPROFITE BIEN !'});
+              await showGiftPopup({secondChances:2,message:'🎁 CADEAU DE BIENVENUE ! PROFITE BIEN !'});
             }
             syncPlayerToCloud();
             return;
@@ -845,7 +844,7 @@ function askPseudoAndRegister(){
       overlay.style.opacity='0';overlay.style.pointerEvents='none';overlay.style.visibility='hidden';
       resolve();
       setTimeout(async()=>{
-        await showGiftPopup({secondChances:2,message:'🎁 BIENVENUE '+pseudo+' !\n2 SECONDES CHANCES OFFERTES !'});
+        await showGiftPopup({secondChances:2,message:'🎁 BIENVENUE '+pseudo+' ! 2 SECONDES CHANCES OFFERTES !'});
       },500);
     };
   });
