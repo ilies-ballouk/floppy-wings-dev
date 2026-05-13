@@ -487,7 +487,10 @@ canvas{display:block;image-rendering:pixelated;max-height:100dvh;max-width:100vw
   <div id="giftIcon" style="font-size:clamp(48px,14vw,72px);">🎁</div>
   <div id="giftMsg" style="font-size:clamp(10px,3vw,15px);color:#ffd700;text-align:center;max-width:300px;line-height:2;"></div>
   <div id="giftDetail" style="font-size:clamp(12px,3.5vw,18px);color:#00f5ff;text-align:center;"></div>
-  <button class="btn yw" id="btnCloseGift" style="margin-top:8px;">🎉 SUPER, MERCI !</button>
+  <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;margin-top:8px;">
+    <button class="btn cy" id="btnEquipGift" style="display:none;">⚡ ÉQUIPER MAINTENANT</button>
+    <button class="btn yw" id="btnCloseGift">🎉 SUPER, MERCI !</button>
+  </div>
 </div>
 
 <script>
@@ -580,12 +583,16 @@ async function applyPendingGifts(gifts){
   for(const gift of gifts){
     if(gift.coins){SV.coins+=gift.coins;}
     if(gift.secondChances){SV.secondChances=(SV.secondChances||0)+gift.secondChances;}
-    if(gift.skin&&!SV.owned.includes(gift.skin)){SV.owned.push(gift.skin);}
+    if(gift.skin){
+      if(!SV.owned.includes(gift.skin))SV.owned.push(gift.skin);
+      // Cas spécial ninja
+      if(gift.skin==='ninja')SV.ninjaUnlocked=true;
+    }
   }
-  saveSave();
+  localStorage.setItem('fwv4',JSON.stringify(SV));
   // Efface les cadeaux sur le serveur
   try{
-    await sb.from('players').update({gifts:[]}).eq('player_id',PLAYER_ID);
+    await sb.from('players').update({gifts:[],owned_skins:SV.owned,ninja_unlocked:SV.ninjaUnlocked}).eq('player_id',PLAYER_ID);
   }catch(e){}
   // Affiche chaque cadeau
   for(const gift of gifts){
@@ -599,22 +606,59 @@ function showGiftPopup(gift){
     const icon=document.getElementById('giftIcon');
     const msg=document.getElementById('giftMsg');
     const detail=document.getElementById('giftDetail');
-    // Contenu
+    const btnEquip=document.getElementById('btnEquipGift');
+    const btnClose=document.getElementById('btnCloseGift');
+
     let iconTxt='🎁';let detailTxt='';
-    if(gift.coins){iconTxt='🪙';detailTxt=`+${gift.coins} PIÈCES`;}
-    else if(gift.secondChances){iconTxt='❤️';detailTxt=`+${gift.secondChances} SECONDE${gift.secondChances>1?'S':''} CHANCE`;}
-    else if(gift.skin){
+    if(gift.coins){
+      iconTxt='🪙';
+      detailTxt=`+${gift.coins} PIÈCES AJOUTÉES !`;
+    } else if(gift.secondChances){
+      iconTxt='❤️';
+      detailTxt=`+${gift.secondChances} SECONDE${gift.secondChances>1?'S':''} CHANCE AJOUTÉE${gift.secondChances>1?'S':''}!`;
+    } else if(gift.skin){
       const sk=SKINS.find(s=>s.id===gift.skin);
       iconTxt=SKIN_EMOJI[gift.skin]||'🎨';
-      detailTxt=`SKIN ${sk?sk.name.replace('\n',' '):'CADEAU'} DÉBLOQUÉ !`;
+      const skinName=sk?sk.name.replace('\n',' '):gift.skin.toUpperCase();
+      detailTxt=`SKIN ${skinName} DÉBLOQUÉ DANS LE SHOP !`;
     }
+
     icon.textContent=iconTxt;
     msg.textContent=gift.message||'UN CADEAU POUR TOI !';
     detail.textContent=detailTxt;
-    overlay.style.opacity='1';overlay.style.pointerEvents='all';
-    document.getElementById('btnCloseGift').onclick=()=>{
-      overlay.style.opacity='0';overlay.style.pointerEvents='none';overlay.style.visibility='hidden';
-      setTimeout(resolve,400);
+
+    // Bouton Équiper — seulement pour les skins
+    if(gift.skin){
+      btnEquip.style.display='block';
+      btnEquip.onclick=()=>{
+        SV.equipped=gift.skin;
+        localStorage.setItem('fwv4',JSON.stringify(SV));
+        btnEquip.textContent='✓ ÉQUIPÉ !';
+        btnEquip.disabled=true;
+        btnEquip.style.opacity='0.5';
+        SFX.buy&&SFX.buy();
+      };
+    } else {
+      btnEquip.style.display='none';
+      btnEquip.disabled=false;
+      btnEquip.textContent='⚡ ÉQUIPER MAINTENANT';
+    }
+
+    overlay.style.visibility='visible';
+    overlay.style.opacity='1';
+    overlay.style.pointerEvents='all';
+
+    btnClose.onclick=()=>{
+      overlay.style.opacity='0';
+      overlay.style.pointerEvents='none';
+      setTimeout(()=>{
+        overlay.style.visibility='hidden';
+        // Reset bouton équiper pour le prochain cadeau
+        btnEquip.style.display='none';
+        btnEquip.disabled=false;
+        btnEquip.textContent='⚡ ÉQUIPER MAINTENANT';
+        resolve();
+      },400);
     };
   });
 }
