@@ -2150,6 +2150,8 @@ document.getElementById('btnCloseDailyBanner').addEventListener('click',e=>{
 function handleTap(e){
   if(anyOverlayOpen())return;
   if(e.target.closest('#menuScreen,#deadScreen'))return;
+  // Ne jamais bloquer les inputs/buttons/labels — iOS a besoin du comportement natif pour ouvrir le clavier
+  if(e.target.closest('input,textarea,button,label,select'))return;
   e.preventDefault();e.stopPropagation();
   try{const ac=getAC();if(ac&&ac.state==='suspended')ac.resume();}catch(e){}
   game&&game.tap();
