@@ -735,7 +735,10 @@ async function bootPlayerCheck(){
       }
       dbg('HIDE BOOT', 'lancement jeu');
       hideBoot();
-      await applyPendingGifts(gifts);
+      // Stocke les cadeaux pour affichage APRÈS lancement du jeu (évite le blocage)
+      window._pendingGiftPopups = gifts;
+      // Marque les cadeaux comme lus sur le serveur immédiatement
+      try{ await sb.from('players').update({gifts:[]}).eq('player_id',PLAYER_ID); }catch(e){}
       syncPlayerToCloud();
     } else {
       dbg('PAS TROUVÉ', 'pe=' + (pe?pe.message:'null') + ' player=' + player);
@@ -760,7 +763,7 @@ async function bootPlayerCheck(){
             dbg('MIGRATION OK', 'hideBoot → jeu');
             hideBoot();
             if(!SV.welcomeGiftClaimed){
-              await showGiftPopup({secondChances:2,message:'🎁 CADEAU DE BIENVENUE ! PROFITE BIEN !'});
+              window._pendingGiftPopups=[{secondChances:2,message:'🎁 CADEAU DE BIENVENUE ! PROFITE BIEN !'}];
             }
             syncPlayerToCloud();
             return;
@@ -843,9 +846,7 @@ function askPseudoAndRegister(){
       syncPlayerToCloud();
       overlay.style.opacity='0';overlay.style.pointerEvents='none';overlay.style.visibility='hidden';
       resolve();
-      setTimeout(async()=>{
-        await showGiftPopup({secondChances:2,message:'🎁 BIENVENUE '+pseudo+' ! 2 SECONDES CHANCES OFFERTES !'});
-      },500);
+      window._pendingGiftPopups=[{secondChances:2,message:'🎁 BIENVENUE '+pseudo+' ! 2 SECONDES CHANCES OFFERTES !'}];
     };
   });
 }
@@ -2260,6 +2261,11 @@ if(SV.ninjaUnlocked&&!SV.owned.includes('ninja')){SV.owned.push('ninja');saveSav
   showMenu();
   document.getElementById('hud').classList.remove('playing');
   game.loop();
+  // Les popups cadeau s'affichent APRÈS que le jeu soit lancé
+  if(window._pendingGiftPopups&&window._pendingGiftPopups.length){
+    for(const g of window._pendingGiftPopups){ await showGiftPopup(g); }
+    window._pendingGiftPopups=[];
+  }
 })();
 
 
