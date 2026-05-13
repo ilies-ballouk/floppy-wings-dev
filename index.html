@@ -572,6 +572,7 @@ async function syncPlayerToCloud(){
       streak:SV.streak||0,
       daily_last:SV.dailyLast||'',
       free_sc_used:SV.freeSCUsed||false,
+      welcome_gift_claimed:SV.welcomeGiftClaimed||false,
       last_seen:new Date().toISOString()
     },{onConflict:'player_id'});
   }catch(e){console.warn('sync cloud:',e);}
@@ -719,8 +720,20 @@ async function bootPlayerCheck(){
       SV.ninjaUnlocked=SV.ninjaUnlocked||player.ninja_unlocked||false;
       SV.streak=player.streak||SV.streak||0;
       SV.dailyLast=SV.dailyLast||player.daily_last||'';
+      // Cadeau de bienvenue : 2 secondes chances si pas encore réclamé
+      const welcomeClaimed=player.welcome_gift_claimed||SV.welcomeGiftClaimed||false;
+      if(!welcomeClaimed){
+        dbg('WELCOME GIFT','offre 2 SC au joueur');
+        SV.secondChances=(SV.secondChances||0)+2;
+        SV.welcomeGiftClaimed=true;
+      }
       localStorage.setItem('fwv4',JSON.stringify(SV));
       const gifts=player.gifts||[];
+      // Injecte le cadeau de bienvenue en tête si pas encore réclamé
+      if(!welcomeClaimed){
+        gifts.unshift({secondChances:2,message:'🎁 CADEAU DE BIENVENUE !
+PROFITE BIEN !'});
+      }
       dbg('HIDE BOOT', 'lancement jeu');
       hideBoot();
       await applyPendingGifts(gifts);
@@ -739,9 +752,17 @@ async function bootPlayerCheck(){
             SV.pseudo=lbRow.pseudo;
             SV.best=Math.max(SV.best||0,lbRow.score||0);
             if(lbRow.skin&&!SV.owned.includes(lbRow.skin))SV.owned.push(lbRow.skin);
+            // Cadeau de bienvenue pour les joueurs migrés aussi
+            if(!SV.welcomeGiftClaimed){
+              SV.secondChances=(SV.secondChances||0)+2;
+              SV.welcomeGiftClaimed=true;
+            }
             localStorage.setItem('fwv4',JSON.stringify(SV));
             dbg('MIGRATION OK', 'hideBoot → jeu');
             hideBoot();
+            if(!SV.welcomeGiftClaimed){
+              await showGiftPopup({secondChances:2,message:'🎁 CADEAU DE BIENVENUE !\nPROFITE BIEN !'});
+            }
             syncPlayerToCloud();
             return;
           }
@@ -816,11 +837,16 @@ function askPseudoAndRegister(){
         if(existing){st.textContent='PSEUDO DÉJÀ PRIS !';st.className='lb-status err';return;}
       }catch(e){dbg('UNICITÉ ERR', e.message);}
       SV.pseudo=pseudo;
+      SV.secondChances=(SV.secondChances||0)+2;
+      SV.welcomeGiftClaimed=true;
       localStorage.setItem('fwPseudo',pseudo);
       localStorage.setItem('fwv4',JSON.stringify(SV));
-      syncPlayerToCloud();// fire & forget
-      overlay.style.opacity='0';overlay.style.pointerEvents='none';
+      syncPlayerToCloud();
+      overlay.style.opacity='0';overlay.style.pointerEvents='none';overlay.style.visibility='hidden';
       resolve();
+      setTimeout(async()=>{
+        await showGiftPopup({secondChances:2,message:'🎁 BIENVENUE '+pseudo+' !\n2 SECONDES CHANCES OFFERTES !'});
+      },500);
     };
   });
 }
@@ -948,6 +974,7 @@ const DEF_SAVE={
   dailyLast:'',streak:0,
   secondChances:1,
   freeSCUsed:false,
+  welcomeGiftClaimed:false,// cadeau de bienvenue 2 SC déjà offert
   pseudo:'',// pseudo joueur (sync table players)
 };
 function loadSave(){
